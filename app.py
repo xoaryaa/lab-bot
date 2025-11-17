@@ -10,7 +10,6 @@ import streamlit as st
 TABLE_SETTINGS_BORDERLESS = {
     "vertical_strategy": "text",
     "horizontal_strategy": "text",
-    # we can tweak these if needed later:
     "snap_tolerance": 3,
     "join_tolerance": 3,
     "edge_min_length": 3,
@@ -159,18 +158,22 @@ def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
     - tests table(s) with test_name, value, unit, ref_low, ref_high, status
     - full text (for phone extraction)
     Returns (dataframe, full_text).
+
+    Strategy:
+    1. Try pdfplumber table extraction (borderless settings).
+    2. If that yields nothing, fall back to line-based parsing on full_text.
     """
     all_rows = []
     full_text_parts = []
 
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
-            # Accumulate page text
             text = page.extract_text() or ""
             full_text_parts.append(text)
 
-            # Extract tables from page
+            # Try to extract tables using text-based strategy
             tables = page.extract_tables(table_settings=TABLE_SETTINGS_BORDERLESS)
+
             for raw_table in tables:
                 if not raw_table or len(raw_table) < 2:
                     continue
@@ -185,7 +188,6 @@ def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
                     continue
 
                 for row in raw_table[1:]:
-                    # Skip empty / malformed rows
                     if not any(row):
                         continue
 
@@ -200,7 +202,6 @@ def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
                     value = parse_value(value_raw)
                     ref_low, ref_high = parse_range(ref_raw)
 
-                    # Only keep rows where we have a numeric value and a usable range
                     if value is None or ref_low is None or ref_high is None:
                         continue
 
@@ -218,8 +219,98 @@ def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
                     )
 
     full_text = "\n".join(full_text_parts)
-    df = pd.DataFrame(all_rows)
+
+    # If table-based extraction failed, fall back to line-based parsing
+    if not all_rows:
+        df = extract_tests_from_text(full_text)
+    else:
+        df = pd.DataFrame(all_rows)
+
     return df, full_text
+
+def extract_tests_from_text(full_text: str) -> pd.DataFrame:
+    """
+    Fallback parser when table extraction fails.
+
+    Generic strategy:
+    - For each line that contains numbers:
+      - Test name = text before the first number
+      - Value    = first number
+      - Ref low  = second-last number
+      - Ref high = last number
+
+    Assumes a pattern like:
+        Hemoglobin      9.4 g/dL      12 - 15
+        Fasting Glucose 88 mg/dL      70 - 100
+    or similar.
+    """
+    rows = []
+    num_pattern = r'-?\d+(?:\.\d+)?'
+
+    for line in full_text.splitlines():
+        raw_line = line
+        line = line.strip()
+        if not line:
+            continue
+
+        # Skip obvious header lines
+        lower = line.lower()
+        if any(
+            kw in lower
+            for kw in ["test", "parameter", "investigation", "result", "value", "reference", "normal", "unit"]
+        ):
+            continue
+
+        # Must contain at least 3 numbers (value + low + high)
+        nums = re.findall(num_pattern, line)
+        if len(nums) < 3:
+            continue
+
+        # Test name = text before the first number
+        first_num_match = re.search(num_pattern, line)
+        if not first_num_match:
+            continue
+
+        test_name = line[: first_num_match.start()].strip()
+        if not test_name:
+            continue
+
+        try:
+            value = float(nums[0])
+            ref_low = float(nums[-2])
+            ref_high = float(nums[-1])
+        except ValueError:
+            continue
+
+        # Ensure we have a sane range; swap if clearly reversed
+        if ref_low > ref_high:
+            ref_low, ref_high = ref_high, ref_low
+
+        # Heuristic: ignore if all three numbers are identical
+        if value == ref_low == ref_high:
+            continue
+
+        # Unit = text between first and second numbers (best-effort)
+        rest_after_value = line[first_num_match.end():]
+        second_num_match = re.search(num_pattern, rest_after_value)
+        unit = ""
+        if second_num_match:
+            unit = rest_after_value[: second_num_match.start()].strip()
+
+        status = classify_status(value, ref_low, ref_high)
+
+        rows.append(
+            {
+                "Test Name": test_name,
+                "Value": value,
+                "Unit": unit,
+                "Ref Low": ref_low,
+                "Ref High": ref_high,
+                "Status": status,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 # Streamlit app UI
 
@@ -235,14 +326,14 @@ def main():
     uploaded_file = st.file_uploader("Upload lab report PDF", type=["pdf"])
 
     if uploaded_file is not None:
-        st.subheader("Debug: Raw PDF text (for parser tuning)")
-        with st.expander("Show raw text"):
-            st.text(full_text[:4000])  # show first 4000 chars
-
         if st.button("Process report"):
             with st.spinner("Reading and analysing the report..."):
                 file_bytes = uploaded_file.read()
                 df, full_text = extract_tests_from_pdf(file_bytes)
+
+                st.subheader("Debug: Raw PDF text (for parser tuning)")
+                with st.expander("Show raw text"):
+                    st.text(full_text[:4000])  # show first 4000 chars
 
                 if df.empty:
                     st.error(
