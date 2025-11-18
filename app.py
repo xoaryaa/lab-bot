@@ -4,6 +4,9 @@ from typing import List, Tuple, Optional
 import pdfplumber
 import pandas as pd
 import streamlit as st
+from googletrans import Translator
+from gtts import gTTS
+
 
 # Utility functions
 
@@ -325,6 +328,43 @@ def extract_tests_from_text(full_text: str) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
+# Translation + TTS
+
+# ---------- Translation + TTS helpers ----------
+
+translator = Translator()
+
+
+def translate_to_marathi(text: str) -> str:
+    """
+    Translate English text to Marathi using googletrans.
+    You can later swap this out for a local model or official API.
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    try:
+        result = translator.translate(text, src="en", dest="mr")
+        return result.text
+    except Exception as exc:  # pragma: no cover
+        # Fallback: return original text with a note
+        return f"[Translation error: {exc}] {text}"
+
+
+def marathi_tts(text: str) -> io.BytesIO:
+    """
+    Convert Marathi text to speech (MP3) using gTTS.
+    Returns a BytesIO object that Streamlit can play.
+    """
+    buf = io.BytesIO()
+    if not text.strip():
+        return buf
+    tts = gTTS(text=text, lang="mr")
+    tts.write_to_fp(buf)
+    buf.seek(0)
+    return buf
+
+
 # Streamlit app UI
 
 def main():
@@ -373,13 +413,30 @@ def main():
                     st.write("No obvious mobile number could be detected in the text.")
 
                 # Generate English summary
-                st.subheader("English Summary (for translation in later phases)")
+                st.subheader("English Summary")
                 summary_en = generate_english_summary(df)
-                st.text_area("Summary", value=summary_en, height=300)
+                st.text_area("English summary", value=summary_en, height=280)
+
+                # ---------- Marathi translation + TTS (Step 2) ----------
+
+                with st.spinner("Translating summary to Marathi and generating audio..."):
+                    marathi_summary = translate_to_marathi(summary_en)
+
+                st.subheader("Marathi Summary")
+                st.text_area("मराठी सारांश", value=marathi_summary, height=280)
+
+                audio_bytes = marathi_tts(marathi_summary)
+                st.subheader("Marathi Audio (Text-to-Speech)")
+                if audio_bytes.getbuffer().nbytes > 0:
+                    st.audio(audio_bytes, format="audio/mp3")
+                else:
+                    st.write("No audio available.")
 
                 st.info(
-                    "Parsing + English Summary"
+                    "This is Phase 2: English summary + Marathi translation and audio preview. "
+                    "In the next step, we'll send this text and audio to the patient's WhatsApp number."
                 )
+
 
 
 if __name__ == "__main__":
