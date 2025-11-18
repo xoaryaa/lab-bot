@@ -1,5 +1,7 @@
 import io
 import re
+import os
+import requests
 from typing import List, Tuple, Optional
 import pdfplumber
 import pandas as pd
@@ -330,8 +332,6 @@ def extract_tests_from_text(full_text: str) -> pd.DataFrame:
 
 # Translation + TTS
 
-# ---------- Translation + TTS helpers ----------
-
 translator = Translator()
 
 
@@ -364,6 +364,115 @@ def marathi_tts(text: str) -> io.BytesIO:
     buf.seek(0)
     return buf
 
+# WhatsApp Cloud API helpers 
+
+def format_phone_for_whatsapp(phone: str) -> str:
+    """
+    Convert a detected Indian number into WhatsApp E.164 format.
+    Examples:
+      '9876543210' -> '919876543210'
+      '+91 9876543210' -> '919876543210'
+    """
+    digits = re.sub(r"\D", "", phone)
+    # If it starts with 0 and length 11, strip leading 0
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    # If already starts with '91' and total length 12, assume it's ok
+    if digits.startswith("91") and len(digits) == 12:
+        return digits
+    # If length 10 (local), prepend '91'
+    if len(digits) == 10:
+        return "91" + digits
+    # Fallback: return as-is
+    return digits
+
+
+def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
+    """
+    Send a simple text message via WhatsApp Cloud API.
+    Returns (success, message_or_error).
+    """
+    token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.environ.get("PHONE_NUMBER_ID")
+
+    if not token or not phone_number_id:
+        return False, "WhatsApp credentials are not set in environment variables."
+
+    url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": format_phone_for_whatsapp(phone),
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": text,
+        },
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+    if resp.status_code >= 200 and resp.status_code < 300:
+        return True, "Text message sent successfully."
+    return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
+
+
+def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
+    """
+    Upload an MP3 audio file as media and send it as an audio message.
+    Uses WhatsApp Cloud API /media + /messages.
+    """
+    token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+
+    if not token or not phone_number_id:
+        return False, "WhatsApp credentials are not set in environment variables."
+
+    # 1) Upload media
+    media_url = "https://graph.facebook.com/v20.0/" + phone_number_id + "/media"
+
+    files = {
+        "file": ("summary.mp3", audio_bytes, "audio/mpeg"),
+    }
+    data = {
+        "messaging_product": "whatsapp",
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+    }
+
+    media_resp = requests.post(media_url, headers=headers, files=files, data=data, timeout=30)
+    if media_resp.status_code < 200 or media_resp.status_code >= 300:
+        return False, f"Error uploading media: {media_resp.status_code} {media_resp.text}"
+
+    media_id = media_resp.json().get("id")
+    if not media_id:
+        return False, "No media ID returned from WhatsApp API."
+
+    # 2) Send audio message referencing media_id
+    msg_url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+    msg_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    msg_payload = {
+        "messaging_product": "whatsapp",
+        "to": format_phone_for_whatsapp(phone),
+        "type": "audio",
+        "audio": {
+            "id": media_id,
+        },
+    }
+
+    msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=15)
+    if msg_resp.status_code >= 200 and msg_resp.status_code < 300:
+        return True, "Audio message sent successfully."
+    return False, f"Error sending audio message: {msg_resp.status_code} {msg_resp.text}"
+
 
 # Streamlit app UI
 
@@ -379,38 +488,42 @@ def main():
     uploaded_file = st.file_uploader("Upload lab report PDF", type=["pdf"])
 
     if uploaded_file is not None:
-        if st.button("Process report"):
-            with st.spinner("Reading and analysing the report..."):
-                file_bytes = uploaded_file.read()
-                df, full_text = extract_tests_from_pdf(file_bytes)
+         # Use getvalue() so it works across reruns
+        file_bytes = uploaded_file.getvalue()
 
-                st.subheader("Debug: Raw PDF text (for parser tuning)")
-                with st.expander("Show raw text"):
-                    st.text(full_text[:4000])  # show first 4000 chars
+        with st.spinner("Reading and analysing the report..."):
+            df, full_text = extract_tests_from_pdf(file_bytes)
 
-                if df.empty:
-                    st.error(
-                        "Could not find any test table with numeric values and reference ranges. "
-                        "You may need to adjust the parsing logic for your lab's report format."
-                    )
-                    return
-
+        if df.empty:
+            st.error(
+                "Could not find any test table with numeric values and reference ranges. "
+                "You may need to adjust the parsing logic for your lab's report format."
+            )
+        else:
                 st.subheader("Parsed Test Results")
                 st.dataframe(df)
 
-                # Try to extract phone numbers
+                # ------ Phone detection + selection ------
+
                 phones = extract_phone_numbers(full_text)
                 st.subheader("Detected Phone Numbers in Report")
+                selected_phone = ""
+
                 if phones:
                     st.write("Possible patient contact numbers found in the report:")
-                    for p in phones:
-                        st.write(f"- {p}")
-                    st.caption(
-                        "Later, we will let you select the correct number and send the summary "
-                        "to the patient via WhatsApp automatically."
+                    selected_phone = st.selectbox(
+                        "Select the patient's WhatsApp number (or type a different one):",
+                        options=[""] + phones,
+                        index=1 if len(phones) > 0 else 0,
                     )
+                    manual_phone = st.text_input("Or enter a different mobile number (optional):")
+
+                    if manual_phone.strip():
+                        selected_phone = manual_phone.strip()
                 else:
                     st.write("No obvious mobile number could be detected in the text.")
+                    selected_phone = st.text_input("Enter the patient's WhatsApp number manually:")
+
 
                 # Generate English summary
                 st.subheader("English Summary")
@@ -431,6 +544,36 @@ def main():
                     st.audio(audio_bytes, format="audio/mp3")
                 else:
                     st.write("No audio available.")
+
+                st.subheader("Send to Patient on WhatsApp")
+
+                if not selected_phone:
+                    st.warning("Select or enter a WhatsApp number above to enable sending.")
+                else:
+                    if st.button("Send Marathi text + audio on WhatsApp"):
+                        with st.spinner("Sending WhatsApp messages..."):
+                            # 1) Send text
+                            ok_text, msg_text = send_whatsapp_text(selected_phone, marathi_summary)
+
+                            # 2) Send audio, only if TTS produced something
+                            audio_ok = False
+                            audio_msg = "Audio was not generated."
+                            if audio_bytes.getbuffer().nbytes > 0:
+                                audio_ok, audio_msg = upload_media_and_send_audio(
+                                    selected_phone,
+                                    audio_bytes.getvalue(),
+                                )
+
+                        # Show results
+                        if ok_text:
+                            st.success(f"Text: {msg_text}")
+                        else:
+                            st.error(f"Text: {msg_text}")
+
+                        if audio_ok:
+                            st.success(f"Audio: {audio_msg}")
+                        else:
+                            st.error(f"Audio: {audio_msg}")
 
                 st.info(
                     "This is Phase 2: English summary + Marathi translation and audio preview. "
