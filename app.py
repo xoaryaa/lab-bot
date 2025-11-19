@@ -9,6 +9,7 @@ import streamlit as st
 from googletrans import Translator
 from gtts import gTTS
 
+API_VERSION = "v22.0"
 
 # Utility functions
 
@@ -398,7 +399,13 @@ def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables."
 
-    url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+    # url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+
+    base_url = f"https://graph.facebook.com/{API_VERSION}"
+
+    url = f"{base_url}/{phone_number_id}/messages"
+    
+
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -427,14 +434,15 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     Uses WhatsApp Cloud API /media + /messages.
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
-    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+    phone_number_id = os.environ.get("PHONE_NUMBER_ID")
 
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables."
 
     # 1) Upload media
-    media_url = "https://graph.facebook.com/v20.0/" + phone_number_id + "/media"
+    base_url = f"https://graph.facebook.com/{API_VERSION}"
 
+    media_url = f"{base_url}/{phone_number_id}/media"
     files = {
         "file": ("summary.mp3", audio_bytes, "audio/mpeg"),
     }
@@ -473,12 +481,58 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
         return True, "Audio message sent successfully."
     return False, f"Error sending audio message: {msg_resp.status_code} {msg_resp.text}"
 
+def send_whatsapp_hello_world_template(phone: str) -> tuple[bool, str, dict]:
+    """
+    Debug helper: send the built-in 'hello_world' template
+    exactly like the Meta cURL example, but using Python.
+    """
+    token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+    if not token or not phone_number_id:
+        return False, "WhatsApp credentials are not set in environment variables.", {}
+
+    api_version = "v22.0"
+    base_url = f"https://graph.facebook.com/{api_version}"
+    url = f"{base_url}/{phone_number_id}/messages"
+
+    to_number = re.sub(r"\D", "", phone or "")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "template",
+        "template": {
+            "name": "hello_world",
+            "language": {"code": "en_US"},
+        },
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+    try:
+        data = resp.json()
+    except Exception:
+        data = {"raw": resp.text}
+
+    if 200 <= resp.status_code < 300 and "messages" in data:
+        return True, f"Status {resp.status_code}, template queued to {to_number}", data
+    return False, f"Status {resp.status_code}, API error", data
+
 
 # Streamlit app UI
 
 def main():
     st.set_page_config(page_title="Lab Report Explainer", page_icon="🧪")
     st.title("🧪 Lab Report Explainer")
+    wh_token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+    wh_num_id = os.environ.get("PHONE_NUMBER_ID")
+    if not wh_token or not wh_num_id:
+        st.warning("WhatsApp env vars not set. Sending will fail until you configure them.")
+
     st.write(
         "Upload a digital lab report PDF. The app will extract test values and compare them "
         "with the reference ranges printed on the report, then generate a simple summary "
@@ -536,7 +590,7 @@ def main():
                     marathi_summary = translate_to_marathi(summary_en)
 
                 st.subheader("Marathi Summary")
-                st.text_area("मराठी सारांश", value=marathi_summary, height=280)
+                st.text_area("मराठी सारांश", value=marathi_summary, height=260)
 
                 audio_bytes = marathi_tts(marathi_summary)
                 st.subheader("Marathi Audio (Text-to-Speech)")
@@ -545,6 +599,10 @@ def main():
                 else:
                     st.write("No audio available.")
 
+                # ------ WhatsApp send button ------
+                debug_to = format_phone_for_whatsapp(selected_phone)
+                st.write("Will send to WhatsApp number:", debug_to)
+
                 st.subheader("Send to Patient on WhatsApp")
 
                 if not selected_phone:
@@ -552,10 +610,8 @@ def main():
                 else:
                     if st.button("Send Marathi text + audio on WhatsApp"):
                         with st.spinner("Sending WhatsApp messages..."):
-                            # 1) Send text
                             ok_text, msg_text = send_whatsapp_text(selected_phone, marathi_summary)
 
-                            # 2) Send audio, only if TTS produced something
                             audio_ok = False
                             audio_msg = "Audio was not generated."
                             if audio_bytes.getbuffer().nbytes > 0:
@@ -564,7 +620,6 @@ def main():
                                     audio_bytes.getvalue(),
                                 )
 
-                        # Show results
                         if ok_text:
                             st.success(f"Text: {msg_text}")
                         else:
@@ -579,8 +634,6 @@ def main():
                     "This is Phase 2: English summary + Marathi translation and audio preview. "
                     "In the next step, we'll send this text and audio to the patient's WhatsApp number."
                 )
-
-
 
 if __name__ == "__main__":
     main()
