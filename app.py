@@ -388,46 +388,103 @@ def format_phone_for_whatsapp(phone: str) -> str:
     return digits
 
 
+# def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
+#     """
+#     Send a simple text message via WhatsApp Cloud API.
+#     Returns (success, message_or_error).
+#     """
+#     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+#     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
+
+#     if not token or not phone_number_id:
+#         return False, "WhatsApp credentials are not set in environment variables."
+
+#     # url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+
+#     base_url = f"https://graph.facebook.com/{API_VERSION}"
+
+#     url = f"{base_url}/{phone_number_id}/messages"
+    
+
+
+#     headers = {
+#         "Authorization": f"Bearer {token}",
+#         "Content-Type": "application/json",
+#     }
+
+#     payload = {
+#         "messaging_product": "whatsapp",
+#         "to": format_phone_for_whatsapp(phone),
+#         "type": "text",
+#         "text": {
+#             "preview_url": False,
+#             "body": text,
+#         },
+#     }
+
+#     resp = requests.post(url, headers=headers, json=payload, timeout=15)
+#     if resp.status_code >= 200 and resp.status_code < 300:
+#         return True, "Text message sent successfully."
+#     return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
+
+def sanitize_whatsapp_param(text: str) -> str:
+    # Remove newlines and tabs
+    cleaned = text.replace("\n", " ").replace("\t", " ")
+
+    # Replace sequences of 5+ spaces with only 1 space
+    while "     " in cleaned:   # 5 spaces
+        cleaned = cleaned.replace("     ", " ")
+
+    return cleaned.strip()
 def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
     """
-    Send a simple text message via WhatsApp Cloud API.
-    Returns (success, message_or_error).
+    Sends WhatsApp message via TEMPLATE using the given text argument
+    after sanitizing it for WhatsApp restrictions.
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
+    api_version = os.environ.get("API_VERSION", "v22.0")
 
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables."
 
-    # url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
-
-    base_url = f"https://graph.facebook.com/{API_VERSION}"
-
-    url = f"{base_url}/{phone_number_id}/messages"
-    
-
+    url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
+    # sanitize text for template parameter restrictions
+    sanitized_text = sanitize_whatsapp_param(text)
+
     payload = {
         "messaging_product": "whatsapp",
         "to": format_phone_for_whatsapp(phone),
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": text,
-        },
+        "type": "template",
+        "template": {
+            "name": "hello_world",
+            "language": {"code": "en_US"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": sanitized_text}
+                    ]
+                }
+            ]
+        }
     }
 
-    resp = requests.post(url, headers=headers, json=payload, timeout=15)
-    if resp.status_code >= 200 and resp.status_code < 300:
-        return True, "Text message sent successfully."
-    return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
+        if 200 <= resp.status_code < 300:
+            return True, "Message sent successfully."
+        return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
 
-
+    except Exception as e:
+        return False, str(e)
+    
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
     Upload an MP3 audio file as media and send it as an audio message.
@@ -487,7 +544,7 @@ def send_whatsapp_hello_world_template(phone: str) -> tuple[bool, str, dict]:
     exactly like the Meta cURL example, but using Python.
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
-    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+    phone_number_id = os.environ.get("PHONE_NUMBER_ID")
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables.", {}
 
@@ -600,35 +657,53 @@ def main():
                     st.write("No audio available.")
 
                 # ------ WhatsApp send button ------
+                
+                st.subheader("Send to Patient on WhatsApp")
+
                 debug_to = format_phone_for_whatsapp(selected_phone)
                 st.write("Will send to WhatsApp number:", debug_to)
 
-                st.subheader("Send to Patient on WhatsApp")
+                col1, col2 = st.columns(2)
 
-                if not selected_phone:
-                    st.warning("Select or enter a WhatsApp number above to enable sending.")
-                else:
-                    if st.button("Send Marathi text + audio on WhatsApp"):
-                        with st.spinner("Sending WhatsApp messages..."):
-                            ok_text, msg_text = send_whatsapp_text(selected_phone, marathi_summary)
+                with col1:
+                    if not selected_phone:
+                        st.warning("Select or enter a WhatsApp number above to enable sending.")
+                    else:
+                        if st.button("Send Marathi text + audio on WhatsApp"):
+                            with st.spinner("Sending WhatsApp messages..."):
+                                ok_text, msg_text= send_whatsapp_text(selected_phone, marathi_summary)
 
-                            audio_ok = False
-                            audio_msg = "Audio was not generated."
-                            if audio_bytes.getbuffer().nbytes > 0:
-                                audio_ok, audio_msg = upload_media_and_send_audio(
-                                    selected_phone,
-                                    audio_bytes.getvalue(),
-                                )
+                                audio_ok = False
+                                audio_msg = "Audio was not generated."
+                                if audio_bytes.getbuffer().nbytes > 0:
+                                    audio_ok, audio_msg = upload_media_and_send_audio(
+                                        selected_phone,
+                                        audio_bytes.getvalue(),
+                                    )
 
-                        if ok_text:
-                            st.success(f"Text: {msg_text}")
+                            if ok_text:
+                                st.success(f"Text: {msg_text}")
+                            else:
+                                st.error(f"Text: {msg_text}")
+                            st.caption("WhatsApp API response for text:")
+                            # st.json(resp_json)
+
+                            if audio_ok:
+                                st.success(f"Audio: {audio_msg}")
+                            else:
+                                st.error(f"Audio: {audio_msg}")
+
+                with col2:
+                    if st.button("Send hello_world template (debug)"):
+                        with st.spinner("Sending hello_world template via Python..."):
+                            ok_tpl, msg_tpl, tpl_json = send_whatsapp_hello_world_template(selected_phone)
+
+                        if ok_tpl:
+                            st.success(f"Template: {msg_tpl}")
                         else:
-                            st.error(f"Text: {msg_text}")
-
-                        if audio_ok:
-                            st.success(f"Audio: {audio_msg}")
-                        else:
-                            st.error(f"Audio: {audio_msg}")
+                            st.error(f"Template: {msg_tpl}")
+                        st.caption("WhatsApp API response for hello_world template:")
+                        st.json(tpl_json)
 
                 st.info(
                     "This is Phase 2: English summary + Marathi translation and audio preview. "
