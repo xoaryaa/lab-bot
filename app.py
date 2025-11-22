@@ -8,8 +8,14 @@ import pandas as pd
 import streamlit as st
 from googletrans import Translator
 from gtts import gTTS
+import os
+from dotenv import load_dotenv
 
-API_VERSION = "v22.0"
+load_dotenv()  
+
+API_VERSION = os.environ.get("API_VERSION", "v22.0")
+BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
+
 
 # Utility functions
 
@@ -436,10 +442,12 @@ def sanitize_whatsapp_param(text: str) -> str:
         cleaned = cleaned.replace("     ", " ")
 
     return cleaned.strip()
+
 def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
     """
-    Sends WhatsApp message via TEMPLATE using the given text argument
-    after sanitizing it for WhatsApp restrictions.
+    Send a simple non-template text message via WhatsApp Cloud API.
+    Requires that the 24-hour customer service window is open
+    (i.e., the user has sent a message to your business number recently).
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
@@ -455,35 +463,24 @@ def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
         "Content-Type": "application/json",
     }
 
-    # sanitize text for template parameter restrictions
-    sanitized_text = sanitize_whatsapp_param(text)
-
     payload = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": format_phone_for_whatsapp(phone),
-        "type": "template",
-        "template": {
-            "name": "hello_world",
-            "language": {"code": "en_US"},
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": sanitized_text}
-                    ]
-                }
-            ]
-        }
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": text,
+        },
     }
 
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=15)
         if 200 <= resp.status_code < 300:
-            return True, "Message sent successfully."
+            return True, f"Text message sent successfully (status {resp.status_code})."
         return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
-
     except Exception as e:
-        return False, str(e)
+        return False, f"Exception while calling WhatsApp API: {e}"
     
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
@@ -492,14 +489,15 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
+    api_version = os.environ.get("API_VERSION", "v22.0")
 
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables."
 
     # 1) Upload media
-    base_url = f"https://graph.facebook.com/{API_VERSION}"
-
+    base_url = f"https://graph.facebook.com/{api_version}"
     media_url = f"{base_url}/{phone_number_id}/media"
+
     files = {
         "file": ("summary.mp3", audio_bytes, "audio/mpeg"),
     }
@@ -511,7 +509,7 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     }
 
     media_resp = requests.post(media_url, headers=headers, files=files, data=data, timeout=30)
-    if media_resp.status_code < 200 or media_resp.status_code >= 300:
+    if not (200 <= media_resp.status_code < 300):
         return False, f"Error uploading media: {media_resp.status_code} {media_resp.text}"
 
     media_id = media_resp.json().get("id")
@@ -519,13 +517,14 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
         return False, "No media ID returned from WhatsApp API."
 
     # 2) Send audio message referencing media_id
-    msg_url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+    msg_url = f"{base_url}/{phone_number_id}/messages"
     msg_headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
     msg_payload = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": format_phone_for_whatsapp(phone),
         "type": "audio",
         "audio": {
@@ -534,9 +533,10 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     }
 
     msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=15)
-    if msg_resp.status_code >= 200 and msg_resp.status_code < 300:
-        return True, "Audio message sent successfully."
+    if 200 <= msg_resp.status_code < 300:
+        return True, f"Audio message sent successfully (status {msg_resp.status_code})."
     return False, f"Error sending audio message: {msg_resp.status_code} {msg_resp.text}"
+
 
 def send_whatsapp_hello_world_template(phone: str) -> tuple[bool, str, dict]:
     """
@@ -583,6 +583,7 @@ def send_whatsapp_hello_world_template(phone: str) -> tuple[bool, str, dict]:
 # Streamlit app UI
 
 def main():
+
     st.set_page_config(page_title="Lab Report Explainer", page_icon="🧪")
     st.title("🧪 Lab Report Explainer")
     wh_token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
