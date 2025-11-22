@@ -443,11 +443,51 @@ def sanitize_whatsapp_param(text: str) -> str:
 
     return cleaned.strip()
 
-def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
+# def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
+#     """
+#     Send a simple non-template text message via WhatsApp Cloud API.
+#     Requires that the 24-hour customer service window is open
+#     (i.e., the user has sent a message to your business number recently).
+#     """
+#     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+#     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
+#     api_version = os.environ.get("API_VERSION", "v22.0")
+
+#     if not token or not phone_number_id:
+#         return False, "WhatsApp credentials are not set in environment variables."
+
+#     url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
+
+#     headers = {
+#         "Authorization": f"Bearer {token}",
+#         "Content-Type": "application/json",
+#     }
+
+#     payload = {
+#         "messaging_product": "whatsapp",
+#         "recipient_type": "individual",
+#         "to": format_phone_for_whatsapp(phone),
+#         "type": "text",
+#         "text": {
+#             "preview_url": False,
+#             "body": text,
+#         },
+#     }
+
+#     try:
+#         resp = requests.post(url, headers=headers, json=payload, timeout=15)
+#         if 200 <= resp.status_code < 300:
+#             return True, f"Text message sent successfully (status {resp.status_code})."
+#         return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
+#     except Exception as e:
+#         return False, f"Exception while calling WhatsApp API: {e}"
+    
+def send_whatsapp_text(phone: str, patient_name: str, marathi_summary: str) -> Tuple[bool, str]:
     """
-    Send a simple non-template text message via WhatsApp Cloud API.
-    Requires that the 24-hour customer service window is open
-    (i.e., the user has sent a message to your business number recently).
+    Send a lab summary using the approved 'lab_summary_marathi' template.
+
+    {{1}} -> patient_name
+    {{2}} -> marathi_summary (abnormal tests + disclaimer in Marathi)
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
@@ -465,23 +505,29 @@ def send_whatsapp_text(phone: str, text: str) -> Tuple[bool, str]:
 
     payload = {
         "messaging_product": "whatsapp",
-        "recipient_type": "individual",
         "to": format_phone_for_whatsapp(phone),
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": text,
+        "type": "template",
+        "template": {
+            "name": "lab_summary_marathi",  # EXACT template name from WhatsApp Manager
+            "language": {"code": "mr_IN"},   # or "en_US" if you start in English
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": patient_name or "रुग्ण"},
+                        {"type": "text", "text": marathi_summary},
+                    ],
+                }
+            ],
         },
     }
 
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=15)
-        if 200 <= resp.status_code < 300:
-            return True, f"Text message sent successfully (status {resp.status_code})."
-        return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
-    except Exception as e:
-        return False, f"Exception while calling WhatsApp API: {e}"
-    
+    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+    if 200 <= resp.status_code < 300:
+        return True, f"Template message sent successfully (status {resp.status_code})."
+    return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
+
+
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
     Upload an MP3 audio file as media and send it as an audio message.
@@ -672,7 +718,9 @@ def main():
                     else:
                         if st.button("Send Marathi text + audio on WhatsApp"):
                             with st.spinner("Sending WhatsApp messages..."):
-                                ok_text, msg_text= send_whatsapp_text(selected_phone, marathi_summary)
+                                # ok_text, msg_text= send_whatsapp_text(selected_phone, marathi_summary)
+                                patient_name = "रुग्ण"  # or parse from PDF later
+                                ok_text, msg_text = send_whatsapp_text(selected_phone, patient_name, marathi_summary)
 
                                 audio_ok = False
                                 audio_msg = "Audio was not generated."
@@ -681,6 +729,11 @@ def main():
                                         selected_phone,
                                         audio_bytes.getvalue(),
                                     )
+                            if ok_text:
+                                audio_ok, audio_msg = upload_media_and_send_audio(
+                                    selected_phone,
+                                    audio_bytes.getvalue(),
+                                )
 
                             if ok_text:
                                 st.success(f"Text: {msg_text}")
