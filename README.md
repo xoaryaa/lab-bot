@@ -44,21 +44,10 @@ simple language. It:
 - **Frontend**: [Streamlit](https://streamlit.io/)
 - **PDF parsing**: [pdfplumber](https://github.com/jsvine/pdfplumber)
 - **Data**: pandas
-- **Translation**: `googletrans` (can be swapped for a local model later)
+- **Translation**: `googletrans` 
 - **TTS**: `gTTS` (Marathi)
 - **Messaging**: WhatsApp Cloud API (`requests`)
 
 ---
 
-## Project Structure
 
-```text
-lab_report_explainer/
-├─ app.py                # Streamlit UI
-├─ parser.py             # PDF + line-based parsing into a DataFrame
-├─ summary.py            # English summary for abnormal tests
-├─ translation_tts.py    # English→Marathi translation + TTS (MP3)
-├─ whatsapp.py           # WhatsApp Cloud API helpers (text + audio)
-├─ cgi.py                # Minimal shim for Python 3.13 httpx/googletrans
-├─ requirements.txt
-└─ README.md
