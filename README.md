@@ -1,4 +1,4 @@
-# Lab Report Explainer for Sanjivani Hospital 🧪
+# Lab Report Explainer 🧪
 
 A Streamlit-based web app that helps patients understand their lab reports in
 simple language. It:
