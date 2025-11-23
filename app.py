@@ -9,7 +9,7 @@ from typing import List
 from parser import extract_tests_from_pdf
 from summary import generate_english_summary
 from translation_tts import translate_to_marathi, marathi_tts
-from whatsapp import send_whatsapp_text, upload_media_and_send_audio, format_phone_for_whatsapp
+from whatsapp import send_lab_summary_template, upload_media_and_send_audio, format_phone_for_whatsapp
 
 from dotenv import load_dotenv
 
@@ -228,7 +228,13 @@ def main():
                             with st.spinner("Sending WhatsApp messages..."):
                                 # ok_text, msg_text= send_whatsapp_text(selected_phone, marathi_summary)
                                 patient_name = "रुग्ण"  # or parse from PDF later
-                                ok_text, msg_text = send_whatsapp_text(selected_phone, patient_name, marathi_summary)
+                                # ok_text, msg_text = send_whatsapp_text(selected_phone, patient_name, marathi_summary)
+                                # patient_name = "Patient"  # or parse from PDF later
+                                ok_text, msg_text = send_lab_summary_template(
+                                    selected_phone,
+                                    patient_name,
+                                    marathi_summary,
+                                )
 
                                 audio_ok = False
                                 audio_msg = "Audio was not generated."
