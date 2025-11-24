@@ -12,17 +12,40 @@ from translation_tts import translate_to_marathi, marathi_tts
 from whatsapp import send_lab_summary_template, upload_media_and_send_audio, format_phone_for_whatsapp
 from dotenv import load_dotenv
 from translator import SmartMedicalTranslator, GoogleTranslateBackend, TranslationConfig
-
+from tts_service import TTSService, TTSConfig
+from explanation_engine import LabTestResult, evaluate_report
 load_dotenv()  
 
-# Initialize once at app startup
-base = GoogleTranslateBackend()
-cfg = TranslationConfig(target_lang="mr")  # or "hi"
-med_translator = SmartMedicalTranslator(base, cfg)
+# # Initialize once at app startup
+# base = GoogleTranslateBackend()
+# t_cfg = TranslationConfig(target_lang="mr")
+# # med_translator = SmartMedicalTranslator(base, t_cfg)
+# translator = SmartMedicalTranslator(base, t_cfg)
+# tts_cfg = TTSConfig(lang="mr", slow=False, output_dir="tts_outputs")
+# tts_service = TTSService(tts_cfg)
 
+# ---- Global translation + TTS services ----
+
+base_translator = GoogleTranslateBackend()
+translation_cfg = TranslationConfig(target_lang="mr")  # "hi" for Hindi if you switch later
+smart_medical_translator = SmartMedicalTranslator(base_translator, translation_cfg)
+
+tts_cfg = TTSConfig(lang="mr", slow=False, output_dir="tts_outputs")
+tts_service = TTSService(tts_cfg)
 
 def get_explanation_in_marathi(english_explanation: str) -> str:
-    return med_translator.translate_explanation(english_explanation)
+    return smart_medical_translator.translate_explanation(english_explanation)
+
+def get_audio_for_explanation(english_text: str):
+    # Step 1: translate
+    mr_text = smart_medical_translator.translate_explanation(english_text)
+
+    # Step 2: generate audio file(s)
+    audio_paths = tts_service.text_to_speech_files(mr_text)
+
+    return mr_text, audio_paths
+
+
 
 # Utility functions
 
@@ -45,6 +68,64 @@ def extract_phone_numbers(text:str)->List[str]:
             seen.add(m)
             phones.append(m)
     return phones
+
+def df_to_labtests(df: pd.DataFrame) -> List[LabTestResult]:
+    """
+    Convert the parsed tests DataFrame into a list of LabTestResult objects
+    for the rule-based explanation engine.
+    """
+    tests: List[LabTestResult] = []
+
+    def _safe_float(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return None
+
+    for _, row in df.iterrows():
+        try:
+            value = float(row["Value"])
+        except (TypeError, ValueError):
+            continue
+
+        tests.append(
+            LabTestResult(
+                name=str(row.get("Test Name", "")).strip(),
+                value=value,
+                unit=str(row.get("Unit", "")).strip(),
+                ref_low=_safe_float(row.get("Ref Low")),
+                ref_high=_safe_float(row.get("Ref High")),
+            )
+        )
+
+    return tests
+
+
+def build_english_explanation_from_df(df: pd.DataFrame) -> str:
+    """
+    Use explanation_engine to generate a full English explanation:
+    - per-test summaries
+    - overall summary
+    - safety notice
+    """
+    tests = df_to_labtests(df)
+    report = evaluate_report(tests)
+
+    parts: List[str] = []
+
+    # per-test explanations
+    for ev in report["evaluations"]:
+        parts.append(ev.summary_text)
+
+    # overall + category + safety
+    if report["overall_summary_en"]:
+        parts.append(report["overall_summary_en"])
+    if report["category_summary_en"]:
+        parts.append(report["category_summary_en"])
+    if report["safety_notice_en"]:
+        parts.append(report["safety_notice_en"])
+
+    return " ".join(parts)
 
 
 # WhatsApp Cloud API helpers 
@@ -148,20 +229,34 @@ def main():
                     selected_phone = st.text_input("Enter the patient's WhatsApp number manually:")
 
 
-                # Generate English summary
-                st.subheader("English Summary")
-                summary_en = generate_english_summary(df)
-                st.text_area("English summary", value=summary_en, height=280)
+                # Generate English explanation using rule-based engine (explanation_engine)
+                st.subheader("English Explanation")
+                summary_en = build_english_explanation_from_df(df)
+                st.text_area("English explanation", value=summary_en, height=280)
 
                 # ---------- Marathi translation + TTS (Step 2) ----------
 
-                with st.spinner("Translating summary to Marathi and generating audio..."):
-                    marathi_summary = translate_to_marathi(summary_en)
+                with st.spinner("Translating explanation to Marathi and generating audio..."):
+                    marathi_summary = smart_medical_translator.translate_explanation(summary_en)
 
-                st.subheader("Marathi Summary")
-                st.text_area("मराठी सारांश", value=marathi_summary, height=260)
+                st.subheader("Marathi Explanation")
+                st.text_area("मराठी स्पष्टीकरण", value=marathi_summary, height=260)
 
-                audio_bytes = marathi_tts(marathi_summary)
+                # Use TTSService to generate MP3, then wrap first one into BytesIO
+                # already imported at top, so only needed if it’s not there
+
+                audio_bytes = io.BytesIO()
+                audio_paths = tts_service.text_to_speech_files(
+                    marathi_summary,
+                    filename_prefix="ui_preview",
+                )
+
+                if audio_paths:
+                    first_path = audio_paths[0]
+                    with open(first_path, "rb") as f:
+                        audio_bytes = io.BytesIO(f.read())
+                        audio_bytes.seek(0)
+
                 st.subheader("Marathi Audio (Text-to-Speech)")
                 if audio_bytes.getbuffer().nbytes > 0:
                     st.audio(audio_bytes, format="audio/mp3")
