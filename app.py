@@ -110,6 +110,32 @@ def df_to_labtests(df: pd.DataFrame) -> List[LabTestResult]:
 
     return tests
 
+def fill_units_from_full_text(df: pd.DataFrame, full_text: str) -> pd.DataFrame:
+    """
+    If Unit column is empty, try to infer units from the raw PDF text using patterns like:
+    'Haemoglobin (g/dL)'.
+    """
+    if "Unit" not in df.columns or "Test Name" not in df.columns:
+        return df
+
+    for idx, row in df.iterrows():
+        current_unit = str(row.get("Unit", "")).strip()
+        if current_unit:
+            continue  # already has something (we may later clean it)
+
+        test_name = str(row.get("Test Name", "")).strip()
+        if not test_name:
+            continue
+
+        # Look for 'TestName (unit)' in the full_text
+        pattern = rf"{re.escape(test_name)}\s*\(([^)]+)\)"
+        m = re.search(pattern, full_text, flags=re.IGNORECASE)
+        if m:
+            df.at[idx, "Unit"] = m.group(1).strip()
+
+    return df
+
+
 # Utility functions
 
 
@@ -270,6 +296,9 @@ def main():
 
         with st.spinner("Reading and analysing the report..."):
             df, full_text = extract_tests_from_pdf(file_bytes)
+            # Try to enrich units from the raw PDF text
+            df = fill_units_from_full_text(df, full_text)
+
 
         if df.empty:
             st.error(
@@ -279,8 +308,19 @@ def main():
         else:
                 st.subheader("Parsed Test Results")
                 display_df = df.copy()
-                if "Unit" in display_df.columns:
-                    display_df["Unit"] = display_df["Unit"].replace({"M:": "", "F:": ""})
+
+                if "Unit" in display_df.columns and "Test Name" in display_df.columns:
+                    def _fix_unit_row(row):
+                        name = str(row.get("Test Name", "")).strip()
+                        raw_unit = str(row.get("Unit", "")).strip()
+                        if raw_unit in ("M:", "F:", ":"):
+                            raw_unit = ""
+                        if not raw_unit and name in DEFAULT_UNITS:
+                            return DEFAULT_UNITS[name]
+                        return raw_unit
+
+                    display_df["Unit"] = display_df.apply(_fix_unit_row, axis=1)
+
                 st.dataframe(display_df)
 
 
