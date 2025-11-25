@@ -5,15 +5,17 @@ import streamlit as st
 import os
 import requests
 from typing import List
-from parser import extract_tests_from_pdf
-from summary import generate_english_summary
-from translation_tts import translate_to_marathi, marathi_tts
-from whatsapp import send_lab_summary_template, upload_media_and_send_audio, format_phone_for_whatsapp
-from dotenv import load_dotenv
-from translator import SmartMedicalTranslator, GoogleTranslateBackend, TranslationConfig
-from tts_service import TTSService, TTSConfig
-from explanation_engine import LabTestResult, evaluate_report
-load_dotenv()  
+from labbot.parser import extract_tests_from_pdf
+from labbot.whatsapp_client import (
+    send_lab_summary_template,
+    upload_media_and_send_audio,
+    format_phone_for_whatsapp,
+)
+from labbot.translator import SmartMedicalTranslator, GoogleTranslateBackend, TranslationConfig
+from labbot.tts_service import TTSService, TTSConfig
+from labbot.explanation_engine import LabTestResult, evaluate_report
+from labbot.phone_utils import extract_phone_numbers
+from labbot.config import DEFAULT_UNITS 
 
 # ---- Global translation + TTS services ----
 

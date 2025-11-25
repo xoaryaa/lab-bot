@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Tuple, List
 from googletrans import Translator 
+import requests
 
 
 # ---------- 1. Number & unit masking ----------
@@ -192,6 +193,93 @@ LANG_CODE_MAP = {
 
 
 class GoogleTranslateBackend(BaseTranslator):
+    """
+    Simple backend that calls the public Google Translate HTTP endpoint directly
+    using `requests`, instead of the flaky `googletrans` library.
+    """
+
+    def __init__(self, timeout: int = 10, max_chars_per_chunk: int = 800):
+        self.timeout = timeout
+        self.max_chars_per_chunk = max_chars_per_chunk
+
+    def _map_lang(self, target_lang: str) -> str:
+        """
+        Map our internal language codes to Google Translate language codes.
+        """
+        t = target_lang.lower()
+        if t in ("mr", "marathi"):
+            return "mr"
+        if t in ("hi", "hindi"):
+            return "hi"
+        return t  # assume caller passed a valid code
+
+    def _chunk_text(self, text: str) -> List[str]:
+        """
+        Split long text into smaller chunks at sentence boundaries.
+        """
+        text = text.strip()
+        if not text:
+            return [""]
+
+        if len(text) <= self.max_chars_per_chunk:
+            return [text]
+
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        chunks: List[str] = []
+        current = ""
+
+        for s in sentences:
+            if len(current) + len(s) + 1 > self.max_chars_per_chunk:
+                if current:
+                    chunks.append(current.strip())
+                    current = ""
+            current += s + " "
+
+        if current.strip():
+            chunks.append(current.strip())
+
+        return chunks
+
+    def _translate_chunk(self, text: str, google_code: str) -> str:
+        """
+        Translate a single chunk using the unofficial Google Translate endpoint.
+        """
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": google_code,
+            "dt": "t",
+            "q": text,
+        }
+
+        resp = requests.get(url, params=params, timeout=self.timeout)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # data[0] is a list of [translated_text, original_text, ...] segments
+        translated_parts: List[str] = []
+        for seg in data[0]:
+            if seg and seg[0]:
+                translated_parts.append(seg[0])
+
+        return "".join(translated_parts)
+
+    def translate(self, text: str, target_lang: str) -> str:
+        if not text:
+            return ""
+
+        google_code = self._map_lang(target_lang)
+        chunks = self._chunk_text(text)
+
+        out_chunks: List[str] = []
+        for chunk in chunks:
+            try:
+                out_chunks.append(self._translate_chunk(chunk, google_code))
+            except Exception as e:
+                raise RuntimeError(f"Translation failed for a chunk: {e}") from e
+
+        return " ".join(out_chunks)
     """
     Thin wrapper around googletrans.Translator.
     No fancy chunking, just a single call per text.

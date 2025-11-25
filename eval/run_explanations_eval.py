@@ -2,7 +2,7 @@
 import csv
 from pathlib import Path
 
-from explanation_engine import LabTestResult, evaluate_test
+from labbot.explanation_engine import LabTestResult, evaluate_test
 
 CSV_PATH = Path(__file__).parent / "explanations_eval.csv"
 

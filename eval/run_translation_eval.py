@@ -2,7 +2,7 @@
 import csv
 from pathlib import Path
 
-from translator import SmartMedicalTranslator, GoogleTranslateBackend, TranslationConfig
+from labbot.translator import SmartMedicalTranslator, GoogleTranslateBackend, TranslationConfig
 
 
 CSV_PATH = Path(__file__).parent / "translation_eval.csv"
