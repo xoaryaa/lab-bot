@@ -313,15 +313,25 @@ def main():
                     def _fix_unit_row(row):
                         name = str(row.get("Test Name", "")).strip()
                         raw_unit = str(row.get("Unit", "")).strip()
+
+                        # clean junk like M:, F:
                         if raw_unit in ("M:", "F:", ":"):
                             raw_unit = ""
+
+                        # if still empty, use our default units
                         if not raw_unit and name in DEFAULT_UNITS:
                             return DEFAULT_UNITS[name]
+
                         return raw_unit
 
                     display_df["Unit"] = display_df.apply(_fix_unit_row, axis=1)
 
+                # show ONLY the cleaned table
                 st.dataframe(display_df)
+
+                # 🔥 very important: use the cleaned df for everything below
+                df = display_df
+
 
 
                 # ------ Phone detection + selection ------
@@ -354,10 +364,31 @@ def main():
                 # ---------- Marathi translation + TTS (Step 2) ----------
 
                 with st.spinner("Translating explanation to Marathi and generating audio..."):
-                    marathi_summary = smart_medical_translator.translate_explanation(summary_en)
+                    try:
+                        marathi_summary = smart_medical_translator.translate_explanation(summary_en)
+                    except Exception as e:
+                        st.error(
+                            "Could not translate the explanation to Marathi right now. "
+                            "This is probably a network/Google Translate issue. "
+                            "Please try again in a minute."
+                        )
+                        st.caption(f"Technical details: {e}")
+                        marathi_summary = ""
 
                 st.subheader("Marathi Explanation")
                 st.text_area("मराठी स्पष्टीकरण", value=marathi_summary, height=260)
+
+                audio_bytes = io.BytesIO()
+                if marathi_summary:
+                    audio_paths = tts_service.text_to_speech_files(
+                        marathi_summary,
+                        filename_prefix="ui_preview",
+                    )
+                    if audio_paths:
+                        first_path = audio_paths[0]
+                        with open(first_path, "rb") as f:
+                            audio_bytes = io.BytesIO(f.read())
+                            audio_bytes.seek(0)
 
                 # Use TTSService to generate MP3, then wrap first one into BytesIO
                 # already imported at top, so only needed if it’s not there

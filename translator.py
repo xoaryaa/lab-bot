@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
-from typing import Dict, Tuple
-from googletrans import Translator as _GTTranslator
+from typing import Dict, Tuple, List
+from googletrans import Translator 
 
 
 # ---------- 1. Number & unit masking ----------
@@ -192,12 +192,39 @@ LANG_CODE_MAP = {
 
 
 class GoogleTranslateBackend(BaseTranslator):
-    def __init__(self):
-        # googletrans keeps an internal client
-        self._client = _GTTranslator()
+    """
+    Thin wrapper around googletrans.Translator.
+    No fancy chunking, just a single call per text.
+    """
+
+    def __init__(self, timeout: int = 10):
+        # use official endpoint + a reasonable timeout
+        self._client = Translator(
+            timeout=timeout,
+            service_urls=["translate.googleapis.com"],
+        )
+
+    def _map_lang(self, target_lang: str) -> str:
+        """
+        Map our internal language codes to googletrans codes.
+        """
+        t = target_lang.lower()
+        if t in ("mr", "marathi"):
+            return "mr"
+        if t in ("hi", "hindi"):
+            return "hi"
+        return t  # assume caller passed a valid code
 
     def translate(self, text: str, target_lang: str) -> str:
-        # Map internal lang codes to google codes if needed
-        google_code = LANG_CODE_MAP.get(target_lang, target_lang)
-        result = self._client.translate(text, dest=google_code)
-        return result.text
+        if not text:
+            return ""
+
+        google_code = self._map_lang(target_lang)
+
+        try:
+            result = self._client.translate(text, dest=google_code)
+            # for a single string, googletrans returns one Translated object
+            return result.text
+        except Exception as e:
+            # Bubble up a clean error; Streamlit will catch this and show a nice message
+            raise RuntimeError(f"Translation failed: {e}") from e
