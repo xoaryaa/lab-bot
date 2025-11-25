@@ -92,46 +92,80 @@ def _compute_flag_and_severity(test: LabTestResult) -> Tuple[str, str, bool, boo
 
     return "unknown", "unknown", True, False
 
+def _fmt_num(x: Optional[float]) -> str:
+    """
+    Format numbers so they look nice in text:
+      - 16.0 -> "16"
+      - 7.5  -> "7.5"
+    """
+    if x is None:
+        return ""
+    try:
+        xf = float(x)
+    except (TypeError, ValueError):
+        return str(x)
+
+    if xf.is_integer():
+        return str(int(xf))
+    # one decimal place is enough for lab ranges usually
+    return f"{xf:.1f}"
+
 def _make_test_summary(test: LabTestResult, flag: str, severity: str) -> str:
     name = test.name
     v = test.value
-    unit = test.unit
+    unit = (test.unit or "").strip()
     low = test.ref_low
     high = test.ref_high
 
+    v_str = _fmt_num(v)
+    low_str = _fmt_num(low)
+    high_str = _fmt_num(high)
+
+    if low is not None and high is not None:
+        if unit:
+            range_str = f"{low_str}-{high_str} {unit}"
+        else:
+            range_str = f"{low_str}-{high_str}"
+    else:
+        range_str = "the usual healthy range"
+
+    # ----- normal -----
     if severity == "normal":
         return (
-            f"Your {name} is {v} {unit}, which is within the usual healthy range "
-            f"of {low}–{high} {unit}."
-        )
+            f"Your {name} is {v_str} {unit}. "
+            f"This is within the usual healthy range ({range_str})."
+        ).strip()
 
+    # ----- borderline -----
     if severity == "borderline":
         direction = "slightly below" if "low" in flag else "slightly above"
         return (
-            f"Your {name} is {v} {unit}, which is {direction} the usual healthy range "
-            f"of {low}–{high} {unit}. This is usually not an emergency but you should "
-            f"discuss it with your doctor."
-        )
+            f"Your {name} is {v_str} {unit}, which is {direction} the usual healthy range "
+            f"({range_str})."
+        ).strip()
 
+    # ----- abnormal -----
     if severity == "abnormal":
         direction = "lower" if "low" in flag else "higher"
         return (
-            f"Your {name} is {v} {unit}, which is {direction} than the usual healthy range "
-            f"of {low}–{high} {unit}. This may need medical attention. Please talk to your doctor."
-        )
+            f"Your {name} is {v_str} {unit}, which is {direction} than the usual healthy range "
+            f"({range_str})."
+        ).strip()
 
+    # ----- critical -----
     if severity == "critical":
         direction = "much lower" if "low" in flag else "much higher"
         return (
-            f"Your {name} is {v} {unit}, which is {direction} than the usual healthy range "
-            f"of {low}–{high} {unit}. This can be serious. Please contact your doctor "
-            f"immediately or seek urgent medical care if you feel unwell."
-        )
+            f"Your {name} is {v_str} {unit}, which is {direction} than the usual healthy range "
+            f"({range_str}). This can be serious."
+        ).strip()
 
+    # ----- fallback -----
     return (
-        f"Your {name} result is {v} {unit}. The usual healthy range is {low}–{high} {unit}. "
-        "Please discuss this with your doctor."
-    )
+        f"Your {name} result is {v_str} {unit}. "
+        f"The usual healthy range is {range_str}."
+    ).strip()
+
 
 def evaluate_test(test: LabTestResult) -> TestEvaluation:
     # auto-fill category if missing

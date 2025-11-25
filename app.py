@@ -1,6 +1,5 @@
 import io
 import re
-# import List
 import pandas as pd
 import streamlit as st
 import os
@@ -16,21 +15,37 @@ from tts_service import TTSService, TTSConfig
 from explanation_engine import LabTestResult, evaluate_report
 load_dotenv()  
 
-# # Initialize once at app startup
-# base = GoogleTranslateBackend()
-# t_cfg = TranslationConfig(target_lang="mr")
-# # med_translator = SmartMedicalTranslator(base, t_cfg)
-# translator = SmartMedicalTranslator(base, t_cfg)
-# tts_cfg = TTSConfig(lang="mr", slow=False, output_dir="tts_outputs")
-# tts_service = TTSService(tts_cfg)
-
 # ---- Global translation + TTS services ----
+
+# Default units used when the parsed PDF does not contain a clean unit
+DEFAULT_UNITS = {
+    "Haemoglobin": "g/dL",
+    "RBC Count": "millions/µL",
+    "PCV": "%",
+    "MCV": "fL",
+    "MCH": "pg",
+    "MCHC": "g/dL",
+    "RDW-CV": "%",
+    "Platelet Count": "cells/µL",
+    "WBC Count": "cells/µL",
+    "Neutrophils": "%",
+    "Lymphocytes": "%",
+    "Monocytes": "%",
+    "Eosinophils": "%",
+    "Basophils": "%",
+    # add/update for your hospital as needed
+}
+
 
 base_translator = GoogleTranslateBackend()
 translation_cfg = TranslationConfig(target_lang="mr")  # "hi" for Hindi if you switch later
 smart_medical_translator = SmartMedicalTranslator(base_translator, translation_cfg)
-
-tts_cfg = TTSConfig(lang="mr", slow=False, output_dir="tts_outputs")
+tts_cfg = TTSConfig(
+    lang="mr",
+    slow=False,
+    output_dir="tts_outputs",
+    max_chars_per_chunk=3000,  # was 220 – make it big
+)
 tts_service = TTSService(tts_cfg)
 
 def get_explanation_in_marathi(english_explanation: str) -> str:
@@ -45,7 +60,55 @@ def get_audio_for_explanation(english_text: str):
 
     return mr_text, audio_paths
 
+def df_to_labtests(df: pd.DataFrame) -> List[LabTestResult]:
+    """
+    Convert the parsed tests DataFrame into a list of LabTestResult objects
+    for the rule-based explanation engine.
+    Cleans junk units like 'M:' / 'F:'.
+    """
+    tests: List[LabTestResult] = []
 
+    def _safe_float(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return None
+
+    # Try to find the unit column by name (e.g., 'Unit')
+    unit_col = None
+    for col in df.columns:
+        if "unit" in col.lower():
+            unit_col = col
+            break
+
+    for _, row in df.iterrows():
+        try:
+            value = float(row["Value"])
+        except (TypeError, ValueError):
+            continue
+
+        # ---- unit cleaning ----
+        raw_unit = ""
+        if unit_col is not None:
+            raw_unit = str(row.get(unit_col, "")).strip()
+
+        # Drop junk like "M:" / "F:" or just ":".
+        if re.fullmatch(r"[A-Za-z]:", raw_unit) or raw_unit == ":":
+            unit = ""
+        else:
+            unit = raw_unit
+
+        tests.append(
+            LabTestResult(
+                name=str(row.get("Test Name", "")).strip(),
+                value=value,
+                unit=unit,
+                ref_low=_safe_float(row.get("Ref Low")),
+                ref_high=_safe_float(row.get("Ref High")),
+            )
+        )
+
+    return tests
 
 # Utility functions
 
@@ -109,6 +172,16 @@ def build_english_explanation_from_df(df: pd.DataFrame) -> str:
     - safety notice
     """
     tests = df_to_labtests(df)
+
+    # ---- FINAL SAFETY CLEANING FOR UNITS ----
+    # Drop junk like "M:" / "F:" even if they slipped through df_to_labtests
+    for t in tests:
+        if t.unit is None:
+            continue
+        u = t.unit.strip()
+        if u in ("M:", "F:", ":"):
+            t.unit = ""
+
     report = evaluate_report(tests)
 
     parts: List[str] = []
@@ -205,7 +278,11 @@ def main():
             )
         else:
                 st.subheader("Parsed Test Results")
-                st.dataframe(df)
+                display_df = df.copy()
+                if "Unit" in display_df.columns:
+                    display_df["Unit"] = display_df["Unit"].replace({"M:": "", "F:": ""})
+                st.dataframe(display_df)
+
 
                 # ------ Phone detection + selection ------
 

@@ -14,6 +14,31 @@ LANG_CODE_TTS = {
     "hi": "hi",  # Hindi
 }
 
+DECIMAL_PATTERN = re.compile(r"\b(\d+)\s*\.\s*(\d+)\b")
+
+
+
+def normalize_numbers_for_tts(text: str) -> str:
+    """
+    Normalize decimals so TTS reads them more naturally.
+
+    Rules:
+      - 16.0 -> 16
+      - 7.5  -> 7 point 5
+    """
+    def _repl(match: re.Match) -> str:
+        int_part = match.group(1)
+        frac_part = match.group(2)
+
+        # drop trailing .0
+        if set(frac_part) == {"0"}:
+            return int_part
+
+        # otherwise say "int point frac"
+        return f"{int_part} point {frac_part}"
+
+    return DECIMAL_PATTERN.sub(_repl, text)
+
 
 @dataclass
 class TTSConfig:
@@ -31,27 +56,52 @@ class TTSFormatter:
     - optionally chunks long text
     """
 
+    
     def split_sentences(self, text: str) -> List[str]:
-        # Simple sentence splitter for Marathi/Hindi/English-ish text
-        parts = re.split(r"([.!?])", text)
+        """
+        Split into sentences, but DO NOT split on decimal points inside numbers.
+        E.g., '16.0 mg/dL.' should be one sentence.
+        """
+
+        # This regex only treats '.' as a sentence boundary if it is NOT between digits.
+        # (?<!\d)\.(?!\d)  -> dot not preceded by digit and not followed by digit
+        pattern = re.compile(r"([!?])|(?<!\d)\.(?!\d)")
+
         sentences = []
-        current = ""
-        for part in parts:
-            current += part
-            if part in [".", "?", "!"]:
-                sentences.append(current.strip())
-                current = ""
-        if current.strip():
-            sentences.append(current.strip())
-        return [s for s in sentences if s]
+        start = 0
+
+        for match in pattern.finditer(text):
+            end = match.start()
+            # The matched punctuation itself:
+            punct = match.group(0)
+
+            # Sentence text is from last start to this match
+            segment = text[start:end].strip()
+            if segment:
+                sentences.append(segment + punct)
+            start = match.end()
+
+        # leftover
+        tail = text[start:].strip()
+        if tail:
+            sentences.append(tail)
+
+        return sentences
+
 
     def format_for_tts(self, text: str) -> str:
         """
-        Return a formatted string where each sentence is on its own line.
-        Newlines usually give nicer pauses.
+        Normalize numbers and put each sentence on its own line.
         """
+        # 1) normalize decimals so they read nicely
+        text = normalize_numbers_for_tts(text)
+
+        # 2) split into sentences using the improved splitter
         sentences = self.split_sentences(text)
-        return "\n".join(sentences)
+
+        # 3) join each sentence on its own line to create natural pauses
+        return "\n".join(s.strip() for s in sentences if s.strip())
+
 
     def chunk_for_tts(self, text: str, max_chars: int) -> List[str]:
         """
