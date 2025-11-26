@@ -191,32 +191,46 @@ def df_to_labtests(df: pd.DataFrame) -> List[LabTestResult]:
 
     return tests
 
-
 def build_english_explanation_from_df(df: pd.DataFrame) -> str:
     """
     Use explanation_engine to generate a full English explanation:
-    - per-test summaries
+    - per-test summaries (only abnormal tests, if any)
     - overall summary
     - safety notice
     """
     tests = df_to_labtests(df)
-
-    # ---- FINAL SAFETY CLEANING FOR UNITS ----
-    # Drop junk like "M:" / "F:" even if they slipped through df_to_labtests
-    for t in tests:
-        if t.unit is None:
-            continue
-        u = t.unit.strip()
-        if u in ("M:", "F:", ":"):
-            t.unit = ""
-
     report = evaluate_report(tests)
 
     parts: List[str] = []
 
-    # per-test explanations
-    for ev in report["evaluations"]:
-        parts.append(ev.summary_text)
+    evaluations = report["evaluations"]
+
+    abnormal_evals = []
+    normal_evals = []
+
+    for ev in evaluations:
+        # We expect TestEvaluation to have severity and/or flag.
+        severity = getattr(ev, "severity", None)
+        flag = getattr(ev, "flag", None)
+
+        # Treat explicit "normal" as normal; everything else as abnormal-ish
+        if severity == "normal" or flag == "normal":
+            normal_evals.append(ev)
+        else:
+            abnormal_evals.append(ev)
+
+    # If there are any abnormal / borderline / critical tests,
+    # show only those. If everything is normal, fall back to all normals
+    # (or you could even skip listing tests entirely).
+    if abnormal_evals:
+        for ev in abnormal_evals:
+            parts.append(ev.summary_text)
+    else:
+        # all tests normal → we *can* skip per-test list completely
+        # If you *don't* want any per-test text even when all normal,
+        # comment this loop out and rely only on overall_summary_en below.
+        for ev in normal_evals:
+            parts.append(ev.summary_text)
 
     # overall + category + safety
     if report["overall_summary_en"]:
@@ -227,6 +241,43 @@ def build_english_explanation_from_df(df: pd.DataFrame) -> str:
         parts.append(report["safety_notice_en"])
 
     return " ".join(parts)
+
+
+# def build_english_explanation_from_df(df: pd.DataFrame) -> str:
+#     """
+#     Use explanation_engine to generate a full English explanation:
+#     - per-test summaries
+#     - overall summary
+#     - safety notice
+#     """
+#     tests = df_to_labtests(df)
+
+#     # ---- FINAL SAFETY CLEANING FOR UNITS ----
+#     # Drop junk like "M:" / "F:" even if they slipped through df_to_labtests
+#     for t in tests:
+#         if t.unit is None:
+#             continue
+#         u = t.unit.strip()
+#         if u in ("M:", "F:", ":"):
+#             t.unit = ""
+
+#     report = evaluate_report(tests)
+
+#     parts: List[str] = []
+
+#     # per-test explanations
+#     for ev in report["evaluations"]:
+#         parts.append(ev.summary_text)
+
+#     # overall + category + safety
+#     if report["overall_summary_en"]:
+#         parts.append(report["overall_summary_en"])
+#     if report["category_summary_en"]:
+#         parts.append(report["category_summary_en"])
+#     if report["safety_notice_en"]:
+#         parts.append(report["safety_notice_en"])
+
+#     return " ".join(parts)
 
 
 # WhatsApp Cloud API helpers 
