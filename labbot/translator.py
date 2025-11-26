@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from typing import Dict, Tuple, List
-from googletrans import Translator 
+# from googletrans import Translator 
 import requests
 
 
@@ -191,10 +191,9 @@ LANG_CODE_MAP = {
     "hi": "hi",  # Hindi
 }
 
-
 class GoogleTranslateBackend(BaseTranslator):
     """
-    Simple backend that calls the public Google Translate HTTP endpoint directly
+    Backend that calls the public Google Translate HTTP endpoint directly
     using `requests`, instead of the flaky `googletrans` library.
     """
 
@@ -215,7 +214,8 @@ class GoogleTranslateBackend(BaseTranslator):
 
     def _chunk_text(self, text: str) -> List[str]:
         """
-        Split long text into smaller chunks at sentence boundaries.
+        Split long text into smaller chunks at sentence boundaries,
+        so the endpoint doesn't choke on very long strings.
         """
         text = text.strip()
         if not text:
@@ -277,42 +277,7 @@ class GoogleTranslateBackend(BaseTranslator):
             try:
                 out_chunks.append(self._translate_chunk(chunk, google_code))
             except Exception as e:
+                # this is what you see as "Technical details" in Streamlit
                 raise RuntimeError(f"Translation failed for a chunk: {e}") from e
 
         return " ".join(out_chunks)
-    """
-    Thin wrapper around googletrans.Translator.
-    No fancy chunking, just a single call per text.
-    """
-
-    def __init__(self, timeout: int = 10):
-        # use official endpoint + a reasonable timeout
-        self._client = Translator(
-            timeout=timeout,
-            service_urls=["translate.googleapis.com"],
-        )
-
-    def _map_lang(self, target_lang: str) -> str:
-        """
-        Map our internal language codes to googletrans codes.
-        """
-        t = target_lang.lower()
-        if t in ("mr", "marathi"):
-            return "mr"
-        if t in ("hi", "hindi"):
-            return "hi"
-        return t  # assume caller passed a valid code
-
-    def translate(self, text: str, target_lang: str) -> str:
-        if not text:
-            return ""
-
-        google_code = self._map_lang(target_lang)
-
-        try:
-            result = self._client.translate(text, dest=google_code)
-            # for a single string, googletrans returns one Translated object
-            return result.text
-        except Exception as e:
-            # Bubble up a clean error; Streamlit will catch this and show a nice message
-            raise RuntimeError(f"Translation failed: {e}") from e
