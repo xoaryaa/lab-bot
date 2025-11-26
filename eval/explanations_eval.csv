@@ -1,6 +1,0 @@
-id,test_name,value,unit,ref_low,ref_high,system_flag,system_explanation,doctor_correctness_score,doctor_clarity_score,safety_ok,notes
-1,fasting blood sugar,134,mg/dL,70,110,high,"Your fasting blood sugar is 134.0 mg/dL, which is higher than the usual healthy range of 70.0–110.0 mg/dL. This may need medical attention. Please talk to your doctor.",,,,
-2,total cholesterol,210,mg/dL,0,200,high,"Your total cholesterol is 210.0 mg/dL, which is slightly above the usual healthy range of 0.0–200.0 mg/dL. This is usually not an emergency but you should discuss it with your doctor.",,,,
-3,hemoglobin,10.5,g/dL,12,15,low,"Your hemoglobin is 10.5 g/dL, which is lower than the usual healthy range of 12.0–15.0 g/dL. This may need medical attention. Please talk to your doctor.",,,,
-4,vitamin D,12,ng/mL,20,50,low,"Your vitamin D is 12.0 ng/mL, which is lower than the usual healthy range of 20.0–50.0 ng/mL. This may need medical attention. Please talk to your doctor.",,,,
-5,creatinine,1.8,mg/dL,0.6,1.2,high,"Your creatinine is 1.8 mg/dL, which is higher than the usual healthy range of 0.6–1.2 mg/dL. This may need medical attention. Please talk to your doctor.",,,,
