@@ -527,8 +527,7 @@ def main():
                 #         st.json(tpl_json)
 
                 st.info(
-                    "This is Phase 2: English summary + Marathi translation and audio preview. "
-                    "In the next step, we'll send this text and audio to the patient's WhatsApp number."
+                    "This is a lab-bot that sends simple and safe explanations of lab reports to patients on WhatsApp. "
                 )
 
 if __name__ == "__main__":
