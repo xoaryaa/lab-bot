@@ -164,11 +164,10 @@ def send_lab_summary_template(phone: str, patient_name: str, marathi_summary: st
         return True, f"Template message sent successfully (status {resp.status_code})."
     return False, f"Error from WhatsApp API: {resp.status_code} {resp.text}"
 
-
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
-    Upload an MP3 audio file as media and send it as an audio message
-    using WhatsApp Cloud API.
+    Upload an MP3 audio file as media and send it as a *document* message.
+    This is more reliable for visibility than `type: "audio"` in some setups.
 
     Returns (ok, message) where message includes some debug detail.
     """
@@ -186,7 +185,7 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
 
     files = {
         # filename, file-content, mime-type
-        "file": ("summary.mp3", audio_bytes, "audio/mpeg"),
+        "file": ("lab_summary.mp3", audio_bytes, "audio/mpeg"),
     }
     data = {
         "messaging_product": "whatsapp",
@@ -206,7 +205,7 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
 
     media_id = media_json["id"]
 
-    # ---------- 2) Send audio message referencing media_id ----------
+    # ---------- 2) Send as a DOCUMENT message referencing media_id ----------
     msg_url = f"{base_url}/{phone_number_id}/messages"
     msg_headers = {
         "Authorization": f"Bearer {token}",
@@ -218,10 +217,10 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     msg_payload = {
         "messaging_product": "whatsapp",
         "to": to_clean,
-        "type": "audio",
-        "audio": {
+        "type": "document",
+        "document": {
             "id": media_id,
-            # you can optionally add caption: "caption": "Lab summary"
+            "filename": "lab_summary.mp3",
         },
     }
 
@@ -231,9 +230,8 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     except Exception:
         msg_json = {"raw": msg_resp.text}
 
-    # WhatsApp only confirms a queued message if "messages" is present
     if 200 <= msg_resp.status_code < 300 and "messages" in msg_json:
         msg_id = msg_json["messages"][0].get("id", "unknown")
-        return True, f"Audio message queued to {to_clean} (status {msg_resp.status_code}, id={msg_id})"
+        return True, f"Audio document queued to {to_clean} (status {msg_resp.status_code}, id={msg_id})"
 
-    return False, f"Error sending audio (status {msg_resp.status_code}): {msg_json}"
+    return False, f"Error sending audio document (status {msg_resp.status_code}): {msg_json}"

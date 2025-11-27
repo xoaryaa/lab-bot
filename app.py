@@ -414,7 +414,7 @@ def main():
                 summary_en = build_english_explanation_from_df(df)
                 st.text_area("English explanation", value=summary_en, height=280)
 
-                # ---------- Marathi translation + TTS (Step 2) ----------
+                                # ---------- Marathi translation + TTS (Step 2) ----------
 
                 with st.spinner("Translating explanation to Marathi and generating audio..."):
                     try:
@@ -431,7 +431,10 @@ def main():
                 st.subheader("Marathi Explanation")
                 st.text_area("मराठी स्पष्टीकरण", value=marathi_summary, height=260)
 
+                # ---------- TTS: generate a single MP3 and preview in UI ----------
+
                 audio_bytes = io.BytesIO()
+
                 if marathi_summary:
                     audio_paths = tts_service.text_to_speech_files(
                         marathi_summary,
@@ -443,21 +446,6 @@ def main():
                             audio_bytes = io.BytesIO(f.read())
                             audio_bytes.seek(0)
 
-                # Use TTSService to generate MP3, then wrap first one into BytesIO
-                # already imported at top, so only needed if it’s not there
-
-                audio_bytes = io.BytesIO()
-                audio_paths = tts_service.text_to_speech_files(
-                    marathi_summary,
-                    filename_prefix="ui_preview",
-                )
-
-                if audio_paths:
-                    first_path = audio_paths[0]
-                    with open(first_path, "rb") as f:
-                        audio_bytes = io.BytesIO(f.read())
-                        audio_bytes.seek(0)
-
                 st.subheader("Marathi Audio (Text-to-Speech)")
                 if audio_bytes.getbuffer().nbytes > 0:
                     st.audio(audio_bytes, format="audio/mp3")
@@ -465,30 +453,27 @@ def main():
                     st.write("No audio available.")
 
                 # ------ WhatsApp send button ------
-                
+
                 st.subheader("Send to Patient on WhatsApp")
 
                 debug_to = format_phone_for_whatsapp(selected_phone)
                 st.write("Will send to WhatsApp number:", debug_to)
 
-                # col1, col2 = st.columns(2)
-
-                # with col1:
                 if not selected_phone:
                     st.warning("Select or enter a WhatsApp number above to enable sending.")
                 else:
                     if st.button("Send Marathi text + audio on WhatsApp"):
                         with st.spinner("Sending WhatsApp messages..."):
-                                # ok_text, msg_text= send_whatsapp_text(selected_phone, marathi_summary)
                             patient_name = "रुग्ण"  # or parse from PDF later
-                                # ok_text, msg_text = send_whatsapp_text(selected_phone, patient_name, marathi_summary)
-                                # patient_name = "Patient"  # or parse from PDF later
+
+                            # 1) Send template text
                             ok_text, msg_text = send_lab_summary_template(
                                 selected_phone,
                                 patient_name,
                                 marathi_summary,
                             )
 
+                            # 2) Send audio (once)
                             audio_ok = False
                             audio_msg = "Audio was not generated."
                             if audio_bytes.getbuffer().nbytes > 0:
@@ -496,18 +481,13 @@ def main():
                                     selected_phone,
                                     audio_bytes.getvalue(),
                                 )
-                        if ok_text:
-                            audio_ok, audio_msg = upload_media_and_send_audio(
-                                selected_phone,
-                                audio_bytes.getvalue(),
-                            )
 
+                        # Show results outside spinner
                         if ok_text:
                             st.success(f"Text: {msg_text}")
                         else:
                             st.error(f"Text: {msg_text}")
                         st.caption("WhatsApp API response for text:")
-                            # st.json(resp_json)
 
                         if audio_ok:
                             st.success(f"Audio: {audio_msg}")
