@@ -167,8 +167,10 @@ def send_lab_summary_template(phone: str, patient_name: str, marathi_summary: st
 
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
-    Upload an MP3 audio file as media and send it as an audio message.
-    Uses WhatsApp Cloud API /media + /messages.
+    Upload an MP3 audio file as media and send it as an audio message
+    using WhatsApp Cloud API.
+
+    Returns (ok, message) where message includes some debug detail.
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
@@ -177,11 +179,13 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     if not token or not phone_number_id:
         return False, "WhatsApp credentials are not set in environment variables."
 
-    # 1) Upload media
     base_url = f"https://graph.facebook.com/{api_version}"
+
+    # ---------- 1) Upload media ----------
     media_url = f"{base_url}/{phone_number_id}/media"
 
     files = {
+        # filename, file-content, mime-type
         "file": ("summary.mp3", audio_bytes, "audio/mpeg"),
     }
     data = {
@@ -192,31 +196,44 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     }
 
     media_resp = requests.post(media_url, headers=headers, files=files, data=data, timeout=30)
-    if not (200 <= media_resp.status_code < 300):
-        return False, f"Error uploading media: {media_resp.status_code} {media_resp.text}"
+    try:
+        media_json = media_resp.json()
+    except Exception:
+        media_json = {"raw": media_resp.text}
 
-    media_id = media_resp.json().get("id")
-    if not media_id:
-        return False, "No media ID returned from WhatsApp API."
+    if not (200 <= media_resp.status_code < 300) or "id" not in media_json:
+        return False, f"Error uploading media (status {media_resp.status_code}): {media_json}"
 
-    # 2) Send audio message referencing media_id
+    media_id = media_json["id"]
+
+    # ---------- 2) Send audio message referencing media_id ----------
     msg_url = f"{base_url}/{phone_number_id}/messages"
     msg_headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
+
+    to_clean = format_phone_for_whatsapp(phone)
+
     msg_payload = {
         "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": format_phone_for_whatsapp(phone),
+        "to": to_clean,
         "type": "audio",
         "audio": {
             "id": media_id,
+            # you can optionally add caption: "caption": "Lab summary"
         },
     }
 
-    msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=15)
-    if 200 <= msg_resp.status_code < 300:
-        return True, f"Audio message sent successfully (status {msg_resp.status_code})."
-    return False, f"Error sending audio message: {msg_resp.status_code} {msg_resp.text}"
+    msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=30)
+    try:
+        msg_json = msg_resp.json()
+    except Exception:
+        msg_json = {"raw": msg_resp.text}
 
+    # WhatsApp only confirms a queued message if "messages" is present
+    if 200 <= msg_resp.status_code < 300 and "messages" in msg_json:
+        msg_id = msg_json["messages"][0].get("id", "unknown")
+        return True, f"Audio message queued to {to_clean} (status {msg_resp.status_code}, id={msg_id})"
+
+    return False, f"Error sending audio (status {msg_resp.status_code}): {msg_json}"
