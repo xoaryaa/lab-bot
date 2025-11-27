@@ -49,3 +49,4 @@ id,test_name,value,unit,ref_low,ref_high,doctor_correctness_score,doctor_clarity
 48,Alkaline Phosphatase,140.0,IU/L,42.0,128.0,,,,
 49,HbA1c,7.8,%,4.0,6.0,,,,
 50,PCV,32.0,%,34.0,48.0,,,,
+51,Haemoglobin, 2.4,g/dL,12.0,15.0,,,,
