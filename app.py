@@ -115,7 +115,7 @@ def render_pixel_header():
 
           <!-- Center text -->
           <div style="text-align: center;">
-            <h1 style="margin: 0; font-size: 1.75rem;">🧪 Lab-bot</h1>
+            <h1 style="margin: 0; font-size: 1.75rem;"> Lab-bot</h1>
             <p style="
                 margin: 0.25rem 0 0 0;
                 font-size: 0.95rem;
