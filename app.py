@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import os
 import requests
+from pathlib import Path
 from typing import List
 from labbot.parser import extract_tests_from_pdf
 from labbot.whatsapp_client import (
@@ -18,6 +19,13 @@ from labbot.phone_utils import extract_phone_numbers
 from labbot.config import DEFAULT_UNITS 
 
 # ---- Global translation + TTS services ----
+
+st.set_page_config(
+    page_title="Lab Report Explainer",
+    page_icon="🧪",
+    layout="wide",
+)
+
 
 # Default units used when the parsed PDF does not contain a clean unit
 DEFAULT_UNITS = {
@@ -38,6 +46,7 @@ DEFAULT_UNITS = {
     # add/update for your hospital as needed
 }
 
+SAMPLE_REPORT_DIR = Path("data/sample_reports")
 
 base_translator = GoogleTranslateBackend()
 translation_cfg = TranslationConfig(target_lang="mr")  # "hi" for Hindi if you switch later
@@ -49,6 +58,122 @@ tts_cfg = TTSConfig(
     max_chars_per_chunk=3000,  # was 220 – make it big
 )
 tts_service = TTSService(tts_cfg)
+
+def render_pixel_header():
+    st.markdown(
+        """
+        <div style="
+            max-width: 900px;
+            margin: 0.75rem auto 1.75rem auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.75rem;
+        ">
+          <!-- Left tube -->
+          <div style="width: 60px; image-rendering: pixelated;">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 viewBox="0 0 32 64"
+                 shape-rendering="crispEdges">
+              <rect x="10" y="4"  width="12" height="4"  fill="#222222" />
+              <rect x="12" y="8"  width="8"  height="2"  fill="#222222" />
+              <rect x="12" y="10" width="8"  height="40" fill="#222222" />
+              <rect x="13" y="11" width="6" height="38" fill="#fdfdfd" />
+              <rect x="13" y="31" width="6" height="18" fill="#FFB7D5">
+                <animate attributeName="y"
+                         values="35;31;35"
+                         dur="2.2s"
+                         repeatCount="indefinite" />
+                <animate attributeName="height"
+                         values="14;18;14"
+                         dur="2.2s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="15" y="28" width="2" height="2" fill="#FF7AC4" opacity="0">
+                <animate attributeName="y"
+                         values="28;18"
+                         dur="1.6s"
+                         repeatCount="indefinite" />
+                <animate attributeName="opacity"
+                         values="0;1;0"
+                         dur="1.6s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="16" y="26" width="2" height="2" fill="#FF7AC4" opacity="0">
+                <animate attributeName="y"
+                         values="26;17"
+                         dur="1.9s"
+                         repeatCount="indefinite" />
+                <animate attributeName="opacity"
+                         values="0;1;0"
+                         dur="1.9s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="12" y="50" width="8" height="2" fill="#e0e0e0" />
+            </svg>
+          </div>
+
+          <!-- Center text -->
+          <div style="text-align: center;">
+            <h1 style="margin: 0; font-size: 1.75rem;">🧪 Lab-bot</h1>
+            <p style="
+                margin: 0.25rem 0 0 0;
+                font-size: 0.95rem;
+                color: #666666;
+                max-width: 540px;
+            ">
+              Upload your lab report and get explained test results in English &amp; Marathi.
+              The bot can also send the summary + audio to patients on WhatsApp.
+            </p>
+          </div>
+
+          <!-- Right tube -->
+          <div style="width: 60px; image-rendering: pixelated;">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 viewBox="0 0 32 64"
+                 shape-rendering="crispEdges">
+              <rect x="10" y="4"  width="12" height="4"  fill="#222222" />
+              <rect x="12" y="8"  width="8"  height="2"  fill="#222222" />
+              <rect x="12" y="10" width="8"  height="40" fill="#222222" />
+              <rect x="13" y="11" width="6" height="38" fill="#fdfdfd" />
+              <rect x="13" y="31" width="6" height="18" fill="#FFB7D5">
+                <animate attributeName="y"
+                         values="35;31;35"
+                         dur="2.2s"
+                         repeatCount="indefinite" />
+                <animate attributeName="height"
+                         values="14;18;14"
+                         dur="2.2s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="15" y="28" width="2" height="2" fill="#FF7AC4" opacity="0">
+                <animate attributeName="y"
+                         values="28;18"
+                         dur="1.6s"
+                         repeatCount="indefinite" />
+                <animate attributeName="opacity"
+                         values="0;1;0"
+                         dur="1.6s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="16" y="26" width="2" height="2" fill="#FF7AC4" opacity="0">
+                <animate attributeName="y"
+                         values="26;17"
+                         dur="1.9s"
+                         repeatCount="indefinite" />
+                <animate attributeName="opacity"
+                         values="0;1;0"
+                         dur="1.9s"
+                         repeatCount="indefinite" />
+              </rect>
+              <rect x="12" y="50" width="8" height="2" fill="#e0e0e0" />
+            </svg>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def get_explanation_in_marathi(english_explanation: str) -> str:
     return smart_medical_translator.translate_explanation(english_explanation)
@@ -243,43 +368,6 @@ def build_english_explanation_from_df(df: pd.DataFrame) -> str:
     return " ".join(parts)
 
 
-# def build_english_explanation_from_df(df: pd.DataFrame) -> str:
-#     """
-#     Use explanation_engine to generate a full English explanation:
-#     - per-test summaries
-#     - overall summary
-#     - safety notice
-#     """
-#     tests = df_to_labtests(df)
-
-#     # ---- FINAL SAFETY CLEANING FOR UNITS ----
-#     # Drop junk like "M:" / "F:" even if they slipped through df_to_labtests
-#     for t in tests:
-#         if t.unit is None:
-#             continue
-#         u = t.unit.strip()
-#         if u in ("M:", "F:", ":"):
-#             t.unit = ""
-
-#     report = evaluate_report(tests)
-
-#     parts: List[str] = []
-
-#     # per-test explanations
-#     for ev in report["evaluations"]:
-#         parts.append(ev.summary_text)
-
-#     # overall + category + safety
-#     if report["overall_summary_en"]:
-#         parts.append(report["overall_summary_en"])
-#     if report["category_summary_en"]:
-#         parts.append(report["category_summary_en"])
-#     if report["safety_notice_en"]:
-#         parts.append(report["safety_notice_en"])
-
-#     return " ".join(parts)
-
-
 # WhatsApp Cloud API helpers 
 
 # def send_whatsapp_hello_world_template(phone: str) -> tuple[bool, str, dict]:
@@ -326,189 +414,239 @@ def build_english_explanation_from_df(df: pd.DataFrame) -> str:
 
 # Streamlit app UI
 
+
+
 def main():
+    # --- Hero header with pixel test tubes ---
+    render_pixel_header()
 
-    st.set_page_config(page_title="Lab Report Explainer", page_icon="🧪")
-    st.title("🧪 Lab Report Explainer")
-    wh_token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
-    wh_num_id = os.environ.get("PHONE_NUMBER_ID")
-    if not wh_token or not wh_num_id:
-        st.warning("WhatsApp env vars not set. Sending will fail until you configure them.")
+    # --- Sidebar: WhatsApp status ---
+    with st.sidebar:
+        st.subheader("Configuration")
+        wh_token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+        wh_num_id = os.environ.get("PHONE_NUMBER_ID")
+        if not wh_token or not wh_num_id:
+            st.warning("WhatsApp env vars not set.\nSending will fail until you configure them.")
+        else:
+            st.success("WhatsApp Cloud API is configured.")
 
-    st.write(
-        "Upload a digital lab report PDF. The app will extract test values and compare them "
-        "with the reference ranges printed on the report, then generate a simple summary "
-        "without any diagnosis or medical advice."
+        st.markdown("---")
+        # st.caption(
+        #     "Tip: Add anonymised PDFs under `data/sample_reports/` so reviewers can test without uploading their own reports."
+        # )
+
+    # --- Choose input source: upload vs sample ---
+    st.subheader("Choose a report")
+
+    cols_src = st.columns([1, 2])
+    with cols_src[0]:
+        source = st.radio(
+            "How do you want to test the app?",
+            ["Upload your own PDF", "Use a sample report"],
+            index=0,
+        )
+
+    uploaded_file = None
+    selected_sample = None
+    file_bytes = None
+
+    with cols_src[1]:
+        if source == "Upload your own PDF":
+            uploaded_file = st.file_uploader("Upload lab report PDF", type=["pdf"])
+            if uploaded_file is not None:
+                file_bytes = uploaded_file.getvalue()
+        else:
+            # List available sample PDFs
+            if SAMPLE_REPORT_DIR.exists():
+                sample_files = [
+                    f.name for f in SAMPLE_REPORT_DIR.iterdir()
+                    if f.is_file() and f.suffix.lower() == ".pdf"
+                ]
+            else:
+                sample_files = []
+
+            if not sample_files:
+                st.warning(
+                    "No sample reports found in `data/sample_reports`. "
+                    "Add a few anonymised PDF reports there to enable this option."
+                )
+            else:
+                selected_sample = st.selectbox("Choose a sample report:", [""] + sample_files)
+                if selected_sample:
+                    sample_path = SAMPLE_REPORT_DIR / selected_sample
+                    with open(sample_path, "rb") as f:
+                        file_bytes = f.read()
+                    st.info(f"Using sample report: `{selected_sample}`")
+
+    if file_bytes is None:
+        st.info("Upload a PDF or select a sample report to see the analysis.")
+        return
+
+    # --- Parse PDF ---
+    with st.spinner("Reading and analysing the report..."):
+        df, full_text = extract_tests_from_pdf(file_bytes)
+        df = fill_units_from_full_text(df, full_text)
+
+    if df.empty:
+        st.error(
+            "Could not find any test table with numeric values and reference ranges. "
+            "You may need to adjust the parsing logic for your lab's report format."
+        )
+        return
+
+    # Clean unit column for display + downstream logic
+    display_df = df.copy()
+    if "Unit" in display_df.columns and "Test Name" in display_df.columns:
+        def _fix_unit_row(row):
+            name = str(row.get("Test Name", "")).strip()
+            raw_unit = str(row.get("Unit", "")).strip()
+            if raw_unit in ("M:", "F:", ":"):
+                raw_unit = ""
+            if not raw_unit and name in DEFAULT_UNITS:
+                return DEFAULT_UNITS[name]
+            return raw_unit
+
+        display_df["Unit"] = display_df.apply(_fix_unit_row, axis=1)
+
+    # Use cleaned df everywhere
+    df = display_df
+
+    # --- Precompute everything once ---
+    # Phone detection
+    phones = extract_phone_numbers(full_text)
+
+    # English explanation
+    summary_en = build_english_explanation_from_df(df)
+
+    # Marathi explanation + TTS
+    with st.spinner("Translating explanation to Marathi and generating audio..."):
+        try:
+            marathi_summary = smart_medical_translator.translate_explanation(summary_en)
+        except Exception as e:
+            st.error(
+                "Could not translate the explanation to Marathi right now. "
+                "This is probably a network/Google Translate issue. "
+                "Please try again in a minute."
+            )
+            st.caption(f"Technical details: {e}")
+            marathi_summary = ""
+
+    audio_bytes = io.BytesIO()
+    if marathi_summary:
+        audio_paths = tts_service.text_to_speech_files(
+            marathi_summary,
+            filename_prefix="ui_preview",
+        )
+        if audio_paths:
+            first_path = audio_paths[0]
+            with open(first_path, "rb") as f:
+                audio_bytes = io.BytesIO(f.read())
+                audio_bytes.seek(0)
+
+    # --- Tabs for nicer navigation ---
+    tab_report, tab_expl, tab_whatsapp = st.tabs(
+        ["Report & Tests", "Explanations", "WhatsApp"]
     )
 
-    uploaded_file = st.file_uploader("Upload lab report PDF", type=["pdf"])
+    # ========= TAB 1: REPORT & TESTS =========
+    with tab_report:
+        st.subheader("Parsed Test Results")
+        st.caption("Values are compared against the reference ranges printed on the report.")
+        st.dataframe(df, use_container_width=True)
 
-    if uploaded_file is not None:
-         # Use getvalue() so it works across reruns
-        file_bytes = uploaded_file.getvalue()
+    # ========= TAB 2: EXPLANATIONS =========
+    with tab_expl:
+        st.subheader("Explanations")
 
-        with st.spinner("Reading and analysing the report..."):
-            df, full_text = extract_tests_from_pdf(file_bytes)
-            # Try to enrich units from the raw PDF text
-            df = fill_units_from_full_text(df, full_text)
+        col_en, col_mr = st.columns(2)
 
-
-        if df.empty:
-            st.error(
-                "Could not find any test table with numeric values and reference ranges. "
-                "You may need to adjust the parsing logic for your lab's report format."
+        with col_en:
+            st.markdown("**English explanation**")
+            st.text_area(
+                label="",
+                value=summary_en,
+                height=260,
             )
+
+        with col_mr:
+            st.markdown("**मराठी स्पष्टीकरण**")
+            st.text_area(
+                label="",
+                value=marathi_summary,
+                height=260,
+            )
+
+        st.markdown("**Marathi Audio Preview**")
+        if audio_bytes.getbuffer().nbytes > 0:
+            st.audio(audio_bytes, format="audio/mp3")
         else:
-                st.subheader("Parsed Test Results")
-                display_df = df.copy()
+            st.write("No audio available.")
 
-                if "Unit" in display_df.columns and "Test Name" in display_df.columns:
-                    def _fix_unit_row(row):
-                        name = str(row.get("Test Name", "")).strip()
-                        raw_unit = str(row.get("Unit", "")).strip()
+        st.info(
+            "The explanation only lists abnormal tests (high/low) plus a short overall summary "
+            "and a safety disclaimer. It never gives a diagnosis or treatment advice."
+        )
 
-                        # clean junk like M:, F:
-                        if raw_unit in ("M:", "F:", ":"):
-                            raw_unit = ""
+    # ========= TAB 3: WHATSAPP =========
+    with tab_whatsapp:
+        st.subheader("Send to patient on WhatsApp")
 
-                        # if still empty, use our default units
-                        if not raw_unit and name in DEFAULT_UNITS:
-                            return DEFAULT_UNITS[name]
+        selected_phone = ""
+        if phones:
+            st.markdown("**Detected phone numbers in the report**")
+            selected_phone = st.selectbox(
+                "Select the patient's WhatsApp number (or enter a different one):",
+                options=[""] + phones,
+                index=1 if len(phones) > 0 else 0,
+            )
+            manual_phone = st.text_input("Or enter a different mobile number (optional):")
+            if manual_phone.strip():
+                selected_phone = manual_phone.strip()
+        else:
+            st.write("No obvious mobile number could be detected in the text.")
+            selected_phone = st.text_input("Enter the patient's WhatsApp number manually:")
 
-                        return raw_unit
+        debug_to = format_phone_for_whatsapp(selected_phone) if selected_phone else "—"
+        st.caption(f"Will send to WhatsApp number: **{debug_to}**")
 
-                    display_df["Unit"] = display_df.apply(_fix_unit_row, axis=1)
+        if not selected_phone:
+            st.warning("Select or enter a WhatsApp number above to enable sending.")
+        else:
+            if st.button("Send Marathi text + audio on WhatsApp"):
+                with st.spinner("Sending WhatsApp messages..."):
+                    patient_name = "रुग्ण"  # or parse from PDF later
+                    audio_bytes_value = audio_bytes.getvalue() if audio_bytes.getbuffer().nbytes > 0 else None
 
-                # show ONLY the cleaned table
-                st.dataframe(display_df)
-
-                # 🔥 very important: use the cleaned df for everything below
-                df = display_df
-
-
-
-                # ------ Phone detection + selection ------
-
-                phones = extract_phone_numbers(full_text)
-                st.subheader("Detected Phone Numbers in Report")
-                selected_phone = ""
-
-                if phones:
-                    st.write("Possible patient contact numbers found in the report:")
-                    selected_phone = st.selectbox(
-                        "Select the patient's WhatsApp number (or type a different one):",
-                        options=[""] + phones,
-                        index=1 if len(phones) > 0 else 0,
-                    )
-                    manual_phone = st.text_input("Or enter a different mobile number (optional):")
-
-                    if manual_phone.strip():
-                        selected_phone = manual_phone.strip()
-                else:
-                    st.write("No obvious mobile number could be detected in the text.")
-                    selected_phone = st.text_input("Enter the patient's WhatsApp number manually:")
-
-
-                # Generate English explanation using rule-based engine (explanation_engine)
-                st.subheader("English Explanation")
-                summary_en = build_english_explanation_from_df(df)
-                st.text_area("English explanation", value=summary_en, height=280)
-
-                                # ---------- Marathi translation + TTS (Step 2) ----------
-
-                with st.spinner("Translating explanation to Marathi and generating audio..."):
+                    # Single template call that can include audio in header (if you wired that up)
                     try:
-                        marathi_summary = smart_medical_translator.translate_explanation(summary_en)
-                    except Exception as e:
-                        st.error(
-                            "Could not translate the explanation to Marathi right now. "
-                            "This is probably a network/Google Translate issue. "
-                            "Please try again in a minute."
+                        from labbot.whatsapp_client import send_lab_summary_template_with_audio
+                        ok_all, msg_all = send_lab_summary_template_with_audio(
+                            selected_phone,
+                            patient_name,
+                            marathi_summary,
+                            audio_bytes_value,
                         )
-                        st.caption(f"Technical details: {e}")
-                        marathi_summary = ""
-
-                st.subheader("Marathi Explanation")
-                st.text_area("मराठी स्पष्टीकरण", value=marathi_summary, height=260)
-
-                # ---------- TTS: generate a single MP3 and preview in UI ----------
-
-                audio_bytes = io.BytesIO()
-
-                if marathi_summary:
-                    audio_paths = tts_service.text_to_speech_files(
-                        marathi_summary,
-                        filename_prefix="ui_preview",
-                    )
-                    if audio_paths:
-                        first_path = audio_paths[0]
-                        with open(first_path, "rb") as f:
-                            audio_bytes = io.BytesIO(f.read())
-                            audio_bytes.seek(0)
-
-                st.subheader("Marathi Audio (Text-to-Speech)")
-                if audio_bytes.getbuffer().nbytes > 0:
-                    st.audio(audio_bytes, format="audio/mp3")
-                else:
-                    st.write("No audio available.")
-
-                # ------ WhatsApp send button ------
-
-                st.subheader("Send to Patient on WhatsApp")
-
-                debug_to = format_phone_for_whatsapp(selected_phone)
-                st.write("Will send to WhatsApp number:", debug_to)
-
-                if not selected_phone:
-                    st.warning("Select or enter a WhatsApp number above to enable sending.")
-                else:
-                    if st.button("Send Marathi text + audio on WhatsApp"):
-                        with st.spinner("Sending WhatsApp messages..."):
-                            patient_name = "रुग्ण"  # or parse from PDF later
-
-                            # 1) Send template text
-                            ok_text, msg_text = send_lab_summary_template(
-                                selected_phone,
-                                patient_name,
-                                marathi_summary,
-                            )
-
-                            # 2) Send audio (once)
-                            audio_ok = False
-                            audio_msg = "Audio was not generated."
-                            if audio_bytes.getbuffer().nbytes > 0:
-                                audio_ok, audio_msg = upload_media_and_send_audio(
-                                    selected_phone,
-                                    audio_bytes.getvalue(),
-                                )
-
-                        # Show results outside spinner
+                        if ok_all:
+                            st.success(msg_all)
+                        else:
+                            st.error(msg_all)
+                    except ImportError:
+                        # Fallback: text-only template if you haven't wired the audio-template helper
+                        ok_text, msg_text = send_lab_summary_template(
+                            selected_phone,
+                            patient_name,
+                            marathi_summary,
+                        )
                         if ok_text:
                             st.success(f"Text: {msg_text}")
                         else:
                             st.error(f"Text: {msg_text}")
-                        st.caption("WhatsApp API response for text:")
 
-                        if audio_ok:
-                            st.success(f"Audio: {audio_msg}")
-                        else:
-                            st.error(f"Audio: {audio_msg}")
+        st.caption(
+            "WhatsApp sending is currently configured for developer/test mode, "
+            "so only approved test numbers will receive the message."
+        )
 
-                # with col2:
-                #     if st.button("Send hello_world template (debug)"):
-                #         with st.spinner("Sending hello_world template via Python..."):
-                #             ok_tpl, msg_tpl, tpl_json = send_whatsapp_hello_world_template(selected_phone)
-
-                #         if ok_tpl:
-                #             st.success(f"Template: {msg_tpl}")
-                #         else:
-                #             st.error(f"Template: {msg_tpl}")
-                #         st.caption("WhatsApp API response for hello_world template:")
-                #         st.json(tpl_json)
-
-                st.info(
-                    "This is a lab-bot that sends simple and safe explanations of lab reports to patients on WhatsApp. "
-                )
 
 if __name__ == "__main__":
     main()
