@@ -3,7 +3,7 @@ import re
 import pandas as pd
 import streamlit as st
 import os
-import requests
+# import requests
 from pathlib import Path
 from typing import List
 from labbot.parser import extract_tests_from_pdf
