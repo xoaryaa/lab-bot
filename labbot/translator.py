@@ -45,7 +45,7 @@ def unmask_numbers_and_units(text: str, masks: Dict[str, str]) -> str:
 
 # ---------- 2. Glossary & post-processing ----------
 
-# For now hardcode; later load from JSON/YAML file.
+# for now hardcode; later load from JSON/YAML file.
 GLOSSARY = {
     "fasting blood sugar": {
         "mr": "उपासाचा रक्तातील साखर",
@@ -109,17 +109,7 @@ class DummyEchoTranslator(BaseTranslator):
     def translate(self, text: str, target_lang: str) -> str:
         return f"[{target_lang} MT HERE] {text}"
 
-
-# Later you can implement e.g. Google/IndicTrans translator:
-# class GoogleTranslator(BaseTranslator):
-#     def __init__(self, api_key: str):
-#         ...
-#     def translate(self, text: str, target_lang: str) -> str:
-#         ... call API / model ...
-
-
-# ---------- 4. High-level translation function ----------
-
+# ---------- 4. Smart medical translator ----------
 @dataclass
 class TranslationConfig:
     target_lang: str = "mr"
@@ -132,14 +122,7 @@ class SmartMedicalTranslator:
         self.config = config
 
     def translate_explanation(self, english_text: str) -> str:
-        """
-        Full pipeline:
-        1. mask numbers/units
-        2. MT
-        3. glossary-controlled post-processing
-        4. unmask numbers/units
-        5. optional sentence-length adjustments
-        """
+        
         # 1. Mask numbers & units
         masked_text, masks = mask_numbers_and_units(english_text)
 
@@ -192,19 +175,13 @@ LANG_CODE_MAP = {
 }
 
 class GoogleTranslateBackend(BaseTranslator):
-    """
-    Backend that calls the public Google Translate HTTP endpoint directly
-    using `requests`, instead of the flaky `googletrans` library.
-    """
 
     def __init__(self, timeout: int = 10, max_chars_per_chunk: int = 800):
         self.timeout = timeout
         self.max_chars_per_chunk = max_chars_per_chunk
 
     def _map_lang(self, target_lang: str) -> str:
-        """
-        Map our internal language codes to Google Translate language codes.
-        """
+        
         t = target_lang.lower()
         if t in ("mr", "marathi"):
             return "mr"

@@ -164,21 +164,7 @@ def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
     return df, full_text
 
 def extract_tests_from_text(full_text: str) -> pd.DataFrame:
-    """
-    Fallback parser when table extraction fails.
 
-    Generic strategy:
-    - For each line that contains numbers:
-      - Test name = text before the first number
-      - Value    = first number
-      - Ref low  = second-last number
-      - Ref high = last number
-
-    Assumes a pattern like:
-        Hemoglobin      9.4 g/dL      12 - 15
-        Fasting Glucose 88 mg/dL      70 - 100
-    or similar.
-    """
     rows = []
     num_pattern = r'-?\d+(?:\.\d+)?'
 

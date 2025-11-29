@@ -38,26 +38,8 @@ class TestEvaluation:
     recommend_doctor: bool
     recommend_urgent: bool
 
-TEST_CATEGORY_MAP: Dict[str, str] = {
-    "fasting blood sugar": "blood sugar",
-    "post prandial blood sugar": "blood sugar",
-    "random blood sugar": "blood sugar",
-    "hba1c": "blood sugar",
-    "total cholesterol": "cholesterol",
-    "ldl": "cholesterol",
-    "hdl": "cholesterol",
-    "triglycerides": "cholesterol",
-    "creatinine": "kidney",
-    "bun": "kidney",
-    "sgpt": "liver",
-    "sgot": "liver",
-    # add more as you see reports
-}
-
 def _compute_flag_and_severity(test: LabTestResult) -> Tuple[str, str, bool, bool]:
-    """
-    Returns (flag, severity, recommend_doctor, recommend_urgent).
-    """
+    
     v = test.value
     if test.ref_low is None or test.ref_high is None:
         # no reference range, be conservative

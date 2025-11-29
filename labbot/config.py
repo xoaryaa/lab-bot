@@ -1,4 +1,3 @@
-# labbot/config.py
 
 DEFAULT_UNITS = {
     "Haemoglobin": "g/dL",
@@ -15,5 +14,4 @@ DEFAULT_UNITS = {
     "Monocytes": "%",
     "Eosinophils": "%",
     "Basophils": "%",
-    # add more as needed
 }
