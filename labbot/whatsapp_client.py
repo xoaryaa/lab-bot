@@ -167,9 +167,7 @@ def send_lab_summary_template(phone: str, patient_name: str, marathi_summary: st
 def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, str]:
     """
     Upload an MP3 audio file as media and send it as a *document* message.
-    This is more reliable for visibility than `type: "audio"` in some setups.
-
-    Returns (ok, message) where message includes some debug detail.
+    This is the version that reliably shows up as an MP3 file in WhatsApp.
     """
     token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
     phone_number_id = os.environ.get("PHONE_NUMBER_ID")
@@ -180,12 +178,11 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
 
     base_url = f"https://graph.facebook.com/{api_version}"
 
-    # ---------- 1) Upload media ----------
+    # 1) Upload media
     media_url = f"{base_url}/{phone_number_id}/media"
-
     files = {
-        # filename, file-content, mime-type
-        "file": ("lab_summary.mp3", audio_bytes, "audio/mpeg"),
+        # important: use an allowed MIME type
+        "file": ("lab-summary.mp3", audio_bytes, "audio/mpeg"),
     }
     data = {
         "messaging_product": "whatsapp",
@@ -195,43 +192,33 @@ def upload_media_and_send_audio(phone: str, audio_bytes: bytes) -> Tuple[bool, s
     }
 
     media_resp = requests.post(media_url, headers=headers, files=files, data=data, timeout=30)
-    try:
-        media_json = media_resp.json()
-    except Exception:
-        media_json = {"raw": media_resp.text}
+    if not (200 <= media_resp.status_code < 300):
+        return False, f"Error uploading media: {media_resp.status_code} {media_resp.text}"
 
-    if not (200 <= media_resp.status_code < 300) or "id" not in media_json:
-        return False, f"Error uploading media (status {media_resp.status_code}): {media_json}"
+    media_json = media_resp.json()
+    media_id = media_json.get("id")
+    if not media_id:
+        return False, f"No media ID returned from WhatsApp API: {media_json}"
 
-    media_id = media_json["id"]
-
-    # ---------- 2) Send as a DOCUMENT message referencing media_id ----------
+    # 2) Send the uploaded media as a document message (MP3 attachment)
     msg_url = f"{base_url}/{phone_number_id}/messages"
     msg_headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-
-    to_clean = format_phone_for_whatsapp(phone)
-
     msg_payload = {
         "messaging_product": "whatsapp",
-        "to": to_clean,
+        "recipient_type": "individual",
+        "to": format_phone_for_whatsapp(phone),
         "type": "document",
         "document": {
             "id": media_id,
-            "filename": "lab_summary.mp3",
+            "filename": "lab-summary.mp3",
+            "caption": "Marathi audio explanation of your lab report.",
         },
     }
 
-    msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=30)
-    try:
-        msg_json = msg_resp.json()
-    except Exception:
-        msg_json = {"raw": msg_resp.text}
-
-    if 200 <= msg_resp.status_code < 300 and "messages" in msg_json:
-        msg_id = msg_json["messages"][0].get("id", "unknown")
-        return True, f"Audio document queued to {to_clean} (status {msg_resp.status_code}, id={msg_id})"
-
-    return False, f"Error sending audio document (status {msg_resp.status_code}): {msg_json}"
+    msg_resp = requests.post(msg_url, headers=msg_headers, json=msg_payload, timeout=15)
+    if 200 <= msg_resp.status_code < 300:
+        return True, f"Audio document sent successfully (status {msg_resp.status_code})."
+    return False, f"Error sending audio document: {msg_resp.status_code} {msg_resp.text}"

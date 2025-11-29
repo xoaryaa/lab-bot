@@ -615,38 +615,46 @@ def main():
             if st.button("Send Marathi text + audio on WhatsApp"):
                 with st.spinner("Sending WhatsApp messages..."):
                     patient_name = "रुग्ण"  # or parse from PDF later
-                    audio_bytes_value = audio_bytes.getvalue() if audio_bytes.getbuffer().nbytes > 0 else None
+                    audio_bytes_value = (
+                        audio_bytes.getvalue()
+                        if audio_bytes.getbuffer().nbytes > 0
+                        else None
+                    )
 
-                    # Single template call that can include audio in header (if you wired that up)
-                    try:
-                        from labbot.whatsapp_client import send_lab_summary_template_with_audio
-                        ok_all, msg_all = send_lab_summary_template_with_audio(
+                    # 1) Send template text
+                    ok_text, msg_text = send_lab_summary_template(
+                        selected_phone,
+                        patient_name,
+                        marathi_summary,
+                    )
+
+                    # 2) Send audio as separate WhatsApp media message
+                    audio_ok = False
+                    audio_msg = "No audio was generated."
+                    if audio_bytes_value:
+                        audio_ok, audio_msg = upload_media_and_send_audio(
                             selected_phone,
-                            patient_name,
-                            marathi_summary,
                             audio_bytes_value,
                         )
-                        if ok_all:
-                            st.success(msg_all)
-                        else:
-                            st.error(msg_all)
-                    except ImportError:
-                        # Fallback: text-only template if you haven't wired the audio-template helper
-                        ok_text, msg_text = send_lab_summary_template(
-                            selected_phone,
-                            patient_name,
-                            marathi_summary,
-                        )
-                        if ok_text:
-                            st.success(f"Text: {msg_text}")
-                        else:
-                            st.error(f"Text: {msg_text}")
+
+                # ---- UI messages ----
+                if ok_text:
+                    st.success(f"Text: {msg_text}")
+                else:
+                    st.error(f"Text: {msg_text}")
+
+                if audio_bytes_value:
+                    if audio_ok:
+                        st.success(f"Audio: {audio_msg}")
+                    else:
+                        st.error(f"Audio: {audio_msg}")
+                else:
+                    st.info("No audio to send (Marathi summary was empty).")
 
         st.caption(
             "WhatsApp sending is currently configured for developer/test mode, "
             "so only approved test numbers will receive the message."
         )
-
 
 if __name__ == "__main__":
     main()
