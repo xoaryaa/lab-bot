@@ -19,13 +19,7 @@ DECIMAL_PATTERN = re.compile(r"\b(\d+)\s*\.\s*(\d+)\b")
 
 
 def normalize_numbers_for_tts(text: str) -> str:
-    """
-    Normalize decimals so TTS reads them more naturally.
-
-    Rules:
-      - 16.0 -> 16
-      - 7.5  -> 7 point 5
-    """
+    
     def _repl(match: re.Match) -> str:
         int_part = match.group(1)
         frac_part = match.group(2)
@@ -49,19 +43,8 @@ class TTSConfig:
 
 
 class TTSFormatter:
-    """
-    Makes text more TTS-friendly:
-    - ensures clear sentence boundaries
-    - inserts line breaks between logical parts
-    - optionally chunks long text
-    """
-
     
     def split_sentences(self, text: str) -> List[str]:
-        """
-        Split into sentences, but DO NOT split on decimal points inside numbers.
-        E.g., '16.0 mg/dL.' should be one sentence.
-        """
 
         # This regex only treats '.' as a sentence boundary if it is NOT between digits.
         # (?<!\d)\.(?!\d)  -> dot not preceded by digit and not followed by digit
@@ -90,9 +73,7 @@ class TTSFormatter:
 
 
     def format_for_tts(self, text: str) -> str:
-        """
-        Normalize numbers and put each sentence on its own line.
-        """
+        
         # 1) normalize decimals so they read nicely
         text = normalize_numbers_for_tts(text)
 
@@ -104,9 +85,7 @@ class TTSFormatter:
 
 
     def chunk_for_tts(self, text: str, max_chars: int) -> List[str]:
-        """
-        In case text is too long, break into smaller chunks.
-        """
+        
         formatted = self.format_for_tts(text)
         lines = formatted.split("\n")
         chunks = []
@@ -133,10 +112,7 @@ class TTSService:
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
 
     def text_to_speech_files(self, text: str, filename_prefix: str = "lab_explanation") -> List[Path]:
-        """
-        Convert text to one or more MP3 files (if long).
-        Returns list of file paths.
-        """
+        
         lang_code = LANG_CODE_TTS.get(self.config.lang, self.config.lang)
         chunks = self.formatter.chunk_for_tts(text, self.config.max_chars_per_chunk)
 

@@ -317,12 +317,7 @@ def df_to_labtests(df: pd.DataFrame) -> List[LabTestResult]:
     return tests
 
 def build_english_explanation_from_df(df: pd.DataFrame) -> str:
-    """
-    Use explanation_engine to generate a full English explanation:
-    - per-test summaries (only abnormal tests, if any)
-    - overall summary
-    - safety notice
-    """
+    
     tests = df_to_labtests(df)
     report = evaluate_report(tests)
 
@@ -344,18 +339,12 @@ def build_english_explanation_from_df(df: pd.DataFrame) -> str:
         else:
             abnormal_evals.append(ev)
 
-    # If there are any abnormal / borderline / critical tests,
-    # show only those. If everything is normal, fall back to all normals
-    # (or you could even skip listing tests entirely).
     if abnormal_evals:
         for ev in abnormal_evals:
             parts.append(ev.summary_text)
     else:
-        # all tests normal → we *can* skip per-test list completely
-        # If you *don't* want any per-test text even when all normal,
-        # comment this loop out and rely only on overall_summary_en below.
-        for ev in normal_evals:
-            parts.append(ev.summary_text)
+            for ev in normal_evals:
+                parts.append(ev.summary_text)
 
     # overall + category + safety
     if report["overall_summary_en"]:

@@ -16,10 +16,7 @@ VALUE_PATTERN = re.compile(
 
 
 def mask_numbers_and_units(text: str) -> Tuple[str, Dict[str, str]]:
-    """
-    Replace numeric values and ranges (with units) with placeholders.
-    Returns (masked_text, mask_dict).
-    """
+    
     masks: Dict[str, str] = {}
 
     def _repl(match: re.Match) -> str:
@@ -35,9 +32,7 @@ def mask_numbers_and_units(text: str) -> Tuple[str, Dict[str, str]]:
 
 
 def unmask_numbers_and_units(text: str, masks: Dict[str, str]) -> str:
-    """
-    Replace placeholders back with original numeric strings.
-    """
+    
     for key, value in masks.items():
         text = text.replace(key, value)
     return text
@@ -102,10 +97,7 @@ class BaseTranslator:
 
 
 class DummyEchoTranslator(BaseTranslator):
-    """
-    For testing our pipeline without real MT.
-    Just returns the same text with a tag.
-    """
+    
     def translate(self, text: str, target_lang: str) -> str:
         return f"[{target_lang} MT HERE] {text}"
 
@@ -148,10 +140,7 @@ class SmartMedicalTranslator:
         return final_text
 
     def _shorten_sentences(self, text: str) -> str:
-        """
-        Very light heuristic: split very long sentences into 2.
-        Keep it simple for now.
-        """
+        
         sentences = re.split(r"([.!?])", text)
         rebuilt = ""
         current = ""

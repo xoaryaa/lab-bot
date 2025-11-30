@@ -6,12 +6,7 @@ import requests
 
 
 def format_phone_for_whatsapp(phone: str) -> str:
-    """
-    Convert a detected Indian number into WhatsApp E.164 format.
-    Examples:
-      '9876543210' -> '919876543210'
-      '+91 9876543210' -> '919876543210'
-    """
+    
     digits = re.sub(r"\D", "", phone)
     # If it starts with 0 and length 11, strip leading 0
     if len(digits) == 11 and digits.startswith("0"):
@@ -39,7 +34,7 @@ def sanitize_whatsapp_param(text: str) -> str:
 
     cleaned = cleaned.strip()
 
-    max_len = 500  
+    max_len = 400  
     if len(cleaned) > max_len:
         cleaned = cleaned[:max_len] + "..."
 
@@ -70,8 +65,8 @@ def send_lab_summary_template(phone: str, patient_name: str, marathi_summary: st
         "to": format_phone_for_whatsapp(phone),
         "type": "template",
         "template": {
-            "name": "lab_summary_marathi",   # exact template name
-            "language": {"code": "en"},      # or "en_US" / whatever shows in the template
+            "name": "lab_summary_marathi",   
+            "language": {"code": "en"},     
             "components": [
                 {
                     "type": "body",
