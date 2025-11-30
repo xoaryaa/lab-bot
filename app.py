@@ -22,7 +22,7 @@ from labbot.config import DEFAULT_UNITS
 
 st.set_page_config(
     page_title="Lab Report Explainer",
-    page_icon="🧪",
+    page_icon="",
     layout="wide",
 )
 
