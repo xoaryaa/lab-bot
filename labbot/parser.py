@@ -18,10 +18,7 @@ TABLE_SETTINGS_BORDERLESS = {
 
 
 def parse_range(cell:str)-> Tuple[Optional[float], Optional[float]]:
-    """
-    Parse a reference range like '12-15 g/dL' or '3.5 - 5.5 mmol/L'
-    into (low, high). Returns (None, None) if parsing fails.
-    """
+    
     if cell is None:
         return None, None
     text= str(cell)
@@ -32,10 +29,7 @@ def parse_range(cell:str)-> Tuple[Optional[float], Optional[float]]:
     return None, None
 
 def parse_value(cell:str)-> Optional[float]:
-    """
-    Parse a numeric value from a cell like '9.4 g/dL' or '<200 mg/dL'.
-    Returns None if no number is found.
-    """
+    
     if cell is None:
         return None
     text = str(cell)
@@ -49,10 +43,7 @@ def parse_value(cell:str)-> Optional[float]:
     return None
 
 def map_headers(headers: List[str]) -> dict:
-    """
-    Try to map raw table headers to canonical columns:
-    test_name, value, unit, ref_range
-    """
+    
     canonical = {"test_name": None, "value": None, "unit": None, "ref_range": None}
     for idx, h in enumerate(headers):
         if not h:
@@ -75,9 +66,7 @@ def map_headers(headers: List[str]) -> dict:
 def classify_status(value: float,
                     low: Optional[float],
                     high: Optional[float]) -> str:
-    """
-    Compare value against (low, high) and return status string.
-    """
+    
     if value is None or low is None or high is None:
         return "unknown"
     if value < low:
@@ -88,16 +77,7 @@ def classify_status(value: float,
         return "within"
     
 def extract_tests_from_pdf(file_bytes: bytes) -> Tuple[pd.DataFrame, str]:
-    """
-    Open a PDF from bytes, extract:
-    - tests table(s) with test_name, value, unit, ref_low, ref_high, status
-    - full text (for phone extraction)
-    Returns (dataframe, full_text).
-
-    Strategy:
-    1. Try pdfplumber table extraction (borderless settings).
-    2. If that yields nothing, fall back to line-based parsing on full_text.
-    """
+    
     all_rows = []
     full_text_parts = []
 
