@@ -10,11 +10,11 @@ It is designed for a small hospital setting where patients are more comfortable 
 
 ## Key highlights
 
-- ✅ Robust **PDF → structured table** 
-- ✅ **Rule-based explanation engine** (no LLM)
-- ✅ **Fine-tuned Marathi translation** 
-- ✅ **WhatsApp integration** 
-- ✅ **Doctor-labelled evaluation** (50 samples) with correctness, clarity & safety metrics
+-  Robust **PDF → structured table** 
+-  **Rule-based explanation engine** (no LLM)
+-  **Fine-tuned Marathi translation** 
+-  **WhatsApp integration** 
+-  **Doctor-labelled evaluation** (50 samples) with correctness, clarity & safety metrics
 
 ---
 
