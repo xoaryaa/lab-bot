@@ -1,4 +1,4 @@
-# Lab-bot 
+# Lab-bot
 Rule-based lab report explainer with Marathi MT, TTS & WhatsApp delivery
 
 Lab-bot is an end-to-end system that takes a **digital lab report PDF**, extracts test values and reference ranges, generates a **safe English explanation**, translates it to **Marathi**, produces **audio**, and sends text + audio to patients via the **WhatsApp Cloud API** (developer mode).
