@@ -14,9 +14,11 @@ It is designed for a small hospital setting where patients are more comfortable 
 -  **Rule-based explanation engine** (no LLM)
 -  **Fine-tuned Marathi translation** 
 -  **WhatsApp integration** 
--  **Doctor-labelled evaluation** (50 samples) with correctness, clarity & safety metrics
+-  **Doctor-labelled evaluation** (50 samples) with 5.0/5 correctness, 4.94/5 clarity & 100% safety & acceptance rate
 
 ---
 
 
+## Demo
 
+- Youtube Link: https://www.youtube.com/watch?v=J39DLmwvuY8
