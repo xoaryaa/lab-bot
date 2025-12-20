@@ -14,7 +14,7 @@ It is designed for a small hospital setting where patients are more comfortable 
 - 100% safety acceptance
 - 1.2% error rate in clarity
 - End-to-end latency p50=22s / p95=74s
-- 2.2 INR per report cost (translation/TTS + delivery)
+- Rs. 2.2 (INR) per report cost (translation/TTS + delivery)
 
 ---
 
