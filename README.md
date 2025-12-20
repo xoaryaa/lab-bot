@@ -9,12 +9,12 @@ It is designed for a small hospital setting where patients are more comfortable 
 ---
 
 ## Key highlights
-
--  Robust **PDF → structured table** 
--  **Rule-based explanation engine** (no LLM)
--  **Fine-tuned Marathi translation** 
--  **WhatsApp integration** 
--  **Doctor-labelled evaluation** (50 samples) with 5.0/5 correctness, 4.94/5 clarity & 100% safety & acceptance rate
+- Value/unit locking, decimal preservation, reference-range validation, glossary-constrained translation, and red-flag condition templates
+- 50 doctor-reviewed samples
+- 100% safety acceptance
+- 1.2% error rate in clarity
+- End-to-end latency p50=22s / p95=74s
+- ₹2.2 per report cost (translation/TTS + delivery)
 
 ---
 
