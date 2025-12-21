@@ -12,7 +12,7 @@ It is designed for a small hospital setting where patients are more comfortable 
 - Value/unit locking, decimal preservation, reference-range validation, glossary-constrained translation, and red-flag condition templates
 - 50 doctor-reviewed samples
 - 100% safety acceptance
-- 1.2% error rate in clarity
+- 1.2% numeric corruption rate
 - End-to-end latency p50=22s / p95=74s
 - Rs. 2.2/report cost (translation + TTS + delivery)
 
